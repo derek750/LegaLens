@@ -1,45 +1,32 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { DocumentTextIcon, CheckBadgeIcon, ExclamationTriangleIcon, MagnifyingGlassIcon } from '@heroicons/react/24/outline';
 import Layout from '../components/Layout';
+import { listDocuments } from '../api.ts';
 
-// Mock data for the dashboard
-const documents = [
-    {
-        id: 1,
-        name: 'commercial_lease_agreement_2026.pdf',
-        uploadDate: '2026-03-05',
-        status: 'Flagged',
-        flags: 3,
-        size: '1.2 MB',
-    },
-    {
-        id: 2,
-        name: 'software_engineering_employment_contract.pdf',
-        uploadDate: '2026-03-01',
-        status: 'Clean',
-        flags: 0,
-        size: '450 KB',
-    },
-    {
-        id: 3,
-        name: 'nda_vendor_agreement_acme_corp.docx',
-        uploadDate: '2026-02-28',
-        status: 'Notice',
-        flags: 1,
-        size: '220 KB',
-    },
-    {
-        id: 4,
-        name: 'gym_membership_terms_and_conditions.pdf',
-        uploadDate: '2026-02-15',
-        status: 'Flagged',
-        flags: 7,
-        size: '890 KB',
-    }
-];
+function formatBytes(bytes) {
+    if (!bytes) return '—';
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
 
 export default function Dashboard() {
+    const [documents, setDocuments] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState('');
+    const [search, setSearch] = useState('');
+
+    useEffect(() => {
+        listDocuments()
+            .then((data) => setDocuments(data.files || []))
+            .catch((err) => setError(err.message))
+            .finally(() => setLoading(false));
+    }, []);
+
+    const filtered = documents.filter((doc) =>
+        doc.name.toLowerCase().includes(search.toLowerCase())
+    );
     return (
         <Layout>
             <div className="w-full max-w-6xl mx-auto">
@@ -54,6 +41,8 @@ export default function Dashboard() {
                         <input
                             type="text"
                             placeholder="Search documents..."
+                            value={search}
+                            onChange={(e) => setSearch(e.target.value)}
                             className="pl-10 pr-4 py-2 bg-white/60 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/50 w-full md:w-64 glass-panel"
                         />
                     </div>
@@ -67,7 +56,7 @@ export default function Dashboard() {
                         </div>
                         <div>
                             <p className="text-sm font-medium text-gray-500">Total Scanned</p>
-                            <h4 className="text-2xl font-bold text-gray-900">12</h4>
+                            <h4 className="text-2xl font-bold text-gray-900">{documents.length}</h4>
                         </div>
                     </div>
 
@@ -77,7 +66,7 @@ export default function Dashboard() {
                         </div>
                         <div>
                             <p className="text-sm font-medium text-gray-500">Clauses Flagged</p>
-                            <h4 className="text-2xl font-bold text-gray-900">24</h4>
+                            <h4 className="text-2xl font-bold text-gray-900">—</h4>
                         </div>
                     </div>
 
@@ -87,7 +76,7 @@ export default function Dashboard() {
                         </div>
                         <div>
                             <p className="text-sm font-medium text-gray-500">Clean Documents</p>
-                            <h4 className="text-2xl font-bold text-gray-900">5</h4>
+                            <h4 className="text-2xl font-bold text-gray-900">—</h4>
                         </div>
                     </div>
                 </div>
@@ -101,14 +90,22 @@ export default function Dashboard() {
                                     <th className="py-4 px-6">Document Name</th>
                                     <th className="py-4 px-6">Date Uploaded</th>
                                     <th className="py-4 px-6">Size</th>
-                                    <th className="py-4 px-6">Status</th>
-                                    <th className="py-4 px-6 text-right">Action</th>
+                                    <th className="py-4 px-6 text-right">Status</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100">
-                                {documents.map((doc, index) => (
+                                {loading && (
+                                    <tr><td colSpan="4" className="py-12 text-center text-slate-400">Loading…</td></tr>
+                                )}
+                                {error && (
+                                    <tr><td colSpan="4" className="py-12 text-center text-red-500">{error}</td></tr>
+                                )}
+                                {!loading && !error && filtered.length === 0 && (
+                                    <tr><td colSpan="4" className="py-12 text-center text-slate-400">No documents found.</td></tr>
+                                )}
+                                {filtered.map((doc, index) => (
                                     <motion.tr
-                                        key={doc.id}
+                                        key={doc.path || doc.name}
                                         initial={{ opacity: 0, y: 10 }}
                                         animate={{ opacity: 1, y: 0 }}
                                         transition={{ delay: index * 0.1 }}
@@ -123,27 +120,15 @@ export default function Dashboard() {
                                             </div>
                                         </td>
                                         <td className="py-4 px-6 text-slate-500 text-sm">
-                                            {new Date(doc.uploadDate).toLocaleDateString()}
+                                            {doc.created_at ? new Date(doc.created_at).toLocaleDateString() : '—'}
                                         </td>
                                         <td className="py-4 px-6 text-slate-500 text-sm">
-                                            {doc.size}
-                                        </td>
-                                        <td className="py-4 px-6">
-                                            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border ${doc.status === 'Clean'
-                                                    ? 'bg-green-50 text-green-700 border-green-200'
-                                                    : doc.status === 'Notice'
-                                                        ? 'bg-yellow-50 text-yellow-700 border-yellow-200'
-                                                        : 'bg-red-50 text-red-700 border-red-200'
-                                                }`}>
-                                                {doc.status === 'Flagged' && <ExclamationTriangleIcon className="w-3.5 h-3.5" />}
-                                                {doc.status === 'Clean' && <CheckBadgeIcon className="w-3.5 h-3.5" />}
-                                                {doc.status === 'Flagged' ? `${doc.flags} Flags` : doc.status}
-                                            </span>
+                                            {formatBytes(doc.metadata?.size)}
                                         </td>
                                         <td className="py-4 px-6 text-right">
-                                            <button className="text-blue-600 font-medium text-sm hover:text-blue-800 opacity-0 group-hover:opacity-100 transition-opacity focus:opacity-100">
-                                                View Report
-                                            </button>
+                                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border bg-blue-50 text-blue-700 border-blue-200">
+                                                Uploaded
+                                            </span>
                                         </td>
                                     </motion.tr>
                                 ))}

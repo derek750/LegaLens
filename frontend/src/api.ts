@@ -22,8 +22,8 @@ export async function apiFetch(
     try {
       const token = await _getAccessToken();
       headers["Authorization"] = `Bearer ${token}`;
-    } catch {
-      // user not logged in – proceed without token
+    } catch (err) {
+      console.error("Failed to get access token:", err);
     }
   }
 

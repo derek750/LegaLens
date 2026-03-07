@@ -29,7 +29,22 @@ def upload_pdf(file_bytes: bytes, original_filename: str, user_id: str) -> dict:
 def list_files(user_id: str) -> list[dict]:
     """List all files belonging to a specific user in the bucket."""
     ensure_bucket_exists()
-    return supabase.storage.from_(BUCKET_NAME).list(path=user_id)
+    storage = supabase.storage.from_(BUCKET_NAME)
+
+    # Top-level entries under the user folder are sub-folders (file_id UUIDs)
+    folders = storage.list(path=user_id)
+    files: list[dict] = []
+    for folder in folders:
+        folder_name = folder.get("name", "")
+        if not folder_name:
+            continue
+        sub_path = f"{user_id}/{folder_name}"
+        items = storage.list(path=sub_path)
+        for item in items:
+            if item.get("name"):
+                item["path"] = f"{sub_path}/{item['name']}"
+                files.append(item)
+    return files
 
 
 def get_signed_url(path: str, expires_in: int = 3600) -> str:
