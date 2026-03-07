@@ -108,8 +108,8 @@ async def speech_to_text_internal(
 
 
 def get_qa_base_url() -> str:
-    """Base URL for the QA service (Agents app). Thinking runs only when user is done talking."""
-    return os.getenv("LEGALENS_QA_BASE_URL", "http://localhost:8000")
+    """Base URL for the API (agents QA lives at /api/agents/qa/{session_id})."""
+    return os.getenv("LEGALENS_QA_BASE_URL", "http://localhost:8000/api").rstrip("/")
 
 
 async def run_qa_remote(session_id: str, question: str) -> str:
@@ -117,11 +117,73 @@ async def run_qa_remote(session_id: str, question: str) -> str:
     Call the QA endpoint (Gemini + Backboard). Used after STT so we only
     run thinking when the user has finished speaking.
     """
-    base = get_qa_base_url().rstrip("/")
-    url = f"{base}/qa/{session_id}"
+    base = get_qa_base_url()
+    url = f"{base}/agents/qa/{session_id}"
     async with httpx.AsyncClient(timeout=60.0) as client:
         resp = await client.post(url, json={"question": question})
         resp.raise_for_status()
         data = resp.json()
         return data.get("answer", "")
+
+
+# Prompt for voice consultant when no document is in context (Gemini + Backboard, global law only).
+CONSULTANT_PROMPT = """You are a Canadian legal information consultant for LegaLens (voice assistant).
+Answer in plain English, 2–4 sentences. Be helpful and accurate; say when you are unsure.
+
+Canadian law context:
+{canadian_law}
+
+{history}User question: {question}"""
+
+
+async def run_voice_think(
+    thread_id: str,
+    user_utterance: str,
+    session_id: str | None = None,
+) -> str:
+    """
+    Voice consultant brain: Backboard thread (new conversation) + global law context → Gemini → answer.
+    Output text is returned for ElevenLabs TTS (caller speaks it).
+    - Uses the given Backboard thread for history and persists this turn there.
+    - Uses global Canadian law context from Backboard (thread or BACKBOARD_LAW_THREAD_ID / scan).
+    - If session_id is set and the agents app has that document, uses document QA; otherwise consultant-only.
+    """
+    from app.agents.backboard import (
+        backboard_get_global_law_context,
+        backboard_get_history,
+        backboard_save,
+    )
+    from app.agents.llm import call_llm, summarizer_llm
+
+    if not (thread_id and user_utterance and user_utterance.strip()):
+        return "Please ask a legal question and I’ll do my best to help."
+
+    # Document-specific path: use existing QA endpoint so document context + Backboard doc thread are used.
+    if session_id and session_id.strip():
+        answer = await run_qa_remote(session_id.strip(), user_utterance.strip())
+        if answer:
+            await backboard_save(thread_id, "user", f"Q&A — Question: {user_utterance.strip()}")
+            await backboard_save(thread_id, "assistant", f"Q&A — Answer: {answer}")
+        return answer or "I couldn’t get an answer for that document. Try rephrasing or select a document first."
+
+    # Consultant path: global law + this Backboard thread only (new thread + global context).
+    canadian_law = await backboard_get_global_law_context(thread_id)
+    history = await backboard_get_history(thread_id)
+    past_qa = [m.get("content", "") for m in history if isinstance(m.get("content"), str) and m["content"].startswith("Q&A")]
+    history_str = ""
+    if past_qa:
+        history_str = "Previous exchange:\n" + "\n".join(past_qa[-3:]) + "\n\n"
+
+    prompt = CONSULTANT_PROMPT.format(
+        canadian_law=canadian_law,
+        history=history_str,
+        question=user_utterance.strip(),
+    )
+    try:
+        answer = await call_llm(summarizer_llm(), prompt)
+        await backboard_save(thread_id, "user", f"Q&A — Question: {user_utterance.strip()}")
+        await backboard_save(thread_id, "assistant", f"Q&A — Answer: {answer}")
+        return answer
+    except Exception as e:
+        return f"Sorry, I couldn’t complete that. ({e!s})"
 

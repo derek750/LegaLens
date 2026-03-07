@@ -48,8 +48,10 @@ export default function Dashboard() {
     const [assistantSpeaking, setAssistantSpeaking] = useState(false);
     const [voiceStatus, setVoiceStatus] = useState('idle');
     const [voiceError, setVoiceError] = useState('');
+    const [hotwordListening, setHotwordListening] = useState(false);
     const voiceConversationRef = useRef(null);
     const voiceBackboardThreadIdRef = useRef(null);
+    const hotwordRecognizerRef = useRef(null);
 
     useEffect(() => {
         listDocuments()
@@ -63,8 +65,104 @@ export default function Dashboard() {
             if (voiceConversationRef.current) {
                 voiceConversationRef.current.endSession().catch(() => {});
             }
+            if (hotwordRecognizerRef.current) {
+                try {
+                    hotwordRecognizerRef.current.stop();
+                } catch (e) {
+                    // ignore
+                }
+                hotwordRecognizerRef.current = null;
+            }
         };
     }, []);
+
+    // Optional in-browser hotword: say "hey consultant" while on the Consultant tab to start voice.
+    useEffect(() => {
+        if (activeTab !== 'consultant' || !hotwordListening) {
+            if (hotwordRecognizerRef.current) {
+                try {
+                    hotwordRecognizerRef.current.stop();
+                } catch (e) {
+                    // ignore
+                }
+                hotwordRecognizerRef.current = null;
+            }
+            return;
+        }
+
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (!SpeechRecognition) {
+            setVoiceError('Hotword requires browser speech recognition (try Chrome on desktop).');
+            setHotwordListening(false);
+            return;
+        }
+
+        const recognition = new SpeechRecognition();
+        recognition.continuous = true;
+        recognition.interimResults = true;
+        recognition.onresult = (event) => {
+            for (let i = event.resultIndex; i < event.results.length; i += 1) {
+                const result = event.results[i];
+                if (!result.isFinal) continue;
+                const transcript = (result[0]?.transcript || '').toLowerCase();
+                if (!transcript) continue;
+
+                const heardHotword =
+                    transcript.includes('hey consultant') ||
+                    transcript.includes('hey lawyer') ||
+                    transcript.includes('talk to my lawyer');
+
+                if (heardHotword) {
+                    // eslint-disable-next-line no-console
+                    console.log('[hotword] detected phrase in transcript:', transcript);
+                    if (!voiceConversationRef.current && voiceStatus !== 'connecting') {
+                        // Start the ElevenLabs conversation (same as clicking the button)
+                        // Ignore the promise so we don't block recognition loop
+                        // eslint-disable-next-line @typescript-eslint/no-floating-promises
+                        handleToggleVoice();
+                    }
+                }
+            }
+        };
+        recognition.onerror = (event) => {
+            // eslint-disable-next-line no-console
+            console.error('Hotword recognition error', event);
+            setVoiceError('Hotword listener error. Mic permissions or browser settings may be blocking access.');
+            setHotwordListening(false);
+        };
+        recognition.onend = () => {
+            // Auto-restart while listening on the Consultant tab
+            if (hotwordListening && activeTab === 'consultant') {
+                try {
+                    recognition.start();
+                } catch (e) {
+                    // ignore
+                }
+            }
+        };
+
+        try {
+            recognition.start();
+            hotwordRecognizerRef.current = recognition;
+        } catch (e) {
+            setVoiceError('Could not start hotword listener. Check microphone permissions.');
+            setHotwordListening(false);
+        }
+
+        return () => {
+            recognition.onresult = null;
+            recognition.onerror = null;
+            recognition.onend = null;
+            try {
+                recognition.stop();
+            } catch (e) {
+                // ignore
+            }
+            hotwordRecognizerRef.current = null;
+        };
+        // We intentionally omit handleToggleVoice from deps; we only care about status + tab + toggle.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [activeTab, hotwordListening, voiceStatus]);
 
     const filtered = documents.filter((doc) =>
         doc.filename.toLowerCase().includes(search.toLowerCase())
@@ -706,6 +804,19 @@ export default function Dashboard() {
                                                     </span>
                                                 )}
                                             </p>
+                                            <div className="mt-1">
+                                                <label className="inline-flex items-center gap-2 cursor-pointer">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={hotwordListening}
+                                                        onChange={(e) => setHotwordListening(e.target.checked)}
+                                                        className="rounded border-[#604B42]/40"
+                                                    />
+                                                    <span>
+                                                        Enable &quot;hey consultant&quot; hotword while this tab is open
+                                                    </span>
+                                                </label>
+                                            </div>
                                             {voiceError && (
                                                 <p className="text-[10px] text-red-600">
                                                     {voiceError}

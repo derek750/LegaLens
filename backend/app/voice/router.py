@@ -1,11 +1,12 @@
 import os
-from typing import Optional
 
 from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Response, UploadFile, status
 from pydantic import BaseModel
 
+from app.agents.backboard import backboard_create_thread
 from app.voice.voice import (
     run_qa_remote,
+    run_voice_think,
     speech_to_text_internal,
     text_to_speech_internal,
 )
@@ -85,3 +86,52 @@ async def voice_turn(
     return Response(content=audio_bytes, media_type="audio/mpeg")
 
 
+# --- Voice consultant: Backboard thread + Gemini + global law → text output to ElevenLabs ---
+
+class BackboardThreadRequest(BaseModel):
+    """Create a new Backboard thread for the voice consultant (conversation memory)."""
+    name: str
+
+
+@router.post("/backboard/thread")
+async def create_backboard_thread(
+    body: BackboardThreadRequest,
+    _: None = Depends(_verify_internal_api_key),
+):
+    """
+    Create a new Backboard thread for the voice consultant.
+    Frontend calls this before starting the ElevenLabs conversation so the agent
+    has a thread for memory; then each turn uses POST /voice/think with this thread_id.
+    """
+    thread_id = await backboard_create_thread(body.name or "LegaLens Voice Consultant")
+    if not thread_id:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Could not create Backboard thread. Check BACKBOARD_API_KEY.",
+        )
+    return {"thread_id": thread_id}
+
+
+class VoiceThinkRequest(BaseModel):
+    """Run Gemini + Backboard for one user utterance; output text is for ElevenLabs TTS."""
+    thread_id: str
+    user_utterance: str
+    session_id: str | None = None
+
+
+@router.post("/think")
+async def voice_think(
+    body: VoiceThinkRequest,
+    _: None = Depends(_verify_internal_api_key),
+):
+    """
+    Speech → Gemini + Backboard (this thread + global law) → answer text → ElevenLabs.
+    Backboard: uses the given thread (new conversation) and the global law context.
+    Returns { answer } so the caller (e.g. ElevenLabs get_legal_answer tool) can speak it via TTS.
+    """
+    answer = await run_voice_think(
+        thread_id=body.thread_id,
+        user_utterance=body.user_utterance,
+        session_id=body.session_id,
+    )
+    return {"answer": answer}
