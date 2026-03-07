@@ -186,17 +186,16 @@ export default function Dashboard() {
                 agentId: session.agent_id,
                 conversationToken: session.webrtc_token,
                 connectionType: session.connection_type || 'webrtc',
-                onStatusChange: (status) => {
+                onStatusChange: ({ status }) => {
                     setVoiceStatus(status);
                 },
-                onModeChange: (mode) => {
+                onModeChange: ({ mode }) => {
                     setAssistantSpeaking(mode === 'speaking');
                 },
-                onError: (error) => {
-                    const message = error?.message || 'Voice session error';
+                onError: (message, context) => {
                     // eslint-disable-next-line no-console
-                    console.error('ElevenLabs conversation error:', error);
-                    setVoiceError(message);
+                    console.error('ElevenLabs conversation error:', message, context);
+                    setVoiceError(message || 'Voice session error');
                     setVoiceStatus('error');
                     voiceConversationRef.current = null;
                     setAssistantSpeaking(false);
