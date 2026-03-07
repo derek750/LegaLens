@@ -5,6 +5,7 @@ Orchestrates Extractor → Analyst → Summarizer; Q&A sub-graph.
 
 from langgraph.graph import StateGraph, END
 
+from app.agents.console_log import log_analysis_result
 from app.agents.state import AgentState
 from app.agents.extractor import extractor_agent
 from app.agents.analyst import analyst_agent
@@ -86,7 +87,9 @@ async def run_analysis(
         "errors": [],
         "current_agent": None,
     }
-    return await graph.ainvoke(initial_state)
+    final_state = await graph.ainvoke(initial_state)
+    log_analysis_result(final_state)
+    return final_state
 
 
 async def run_qa(

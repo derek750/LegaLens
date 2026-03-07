@@ -74,6 +74,7 @@ def summarizer_agent(state: AgentState) -> AgentState:
     Agent 3 (Summary Mode): Synthesizes analyzed clauses into an executive summary.
     """
     analyzed_clauses = state.get("analyzed_clauses", [])
+    print("[Summarizer] Generating executive summary and risk verdict...")
 
     if not analyzed_clauses:
         return {
@@ -116,12 +117,14 @@ def summarizer_agent(state: AgentState) -> AgentState:
         raw_output = re.sub(r"\s*```$", "", raw_output)
         summary_data = json.loads(raw_output)
 
+        risk = summary_data.get("overall_risk_score", "MEDIUM")
+        print(f"[Summarizer] Done. Overall risk: {risk}")
         return {
             **state,
             "executive_summary": summary_data.get("executive_summary", ""),
             "top_risks": summary_data.get("top_risks", []),
             "bottom_line": summary_data.get("bottom_line", ""),
-            "overall_risk_score": summary_data.get("overall_risk_score", "MEDIUM"),
+            "overall_risk_score": risk,
             "current_agent": "summarizer",
         }
 

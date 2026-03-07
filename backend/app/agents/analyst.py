@@ -65,6 +65,7 @@ def analyst_agent(state: AgentState) -> AgentState:
     Writes: analyzed_clauses
     """
     clauses = state.get("clauses", [])
+    print(f"[Analyst] Analyzing {len(clauses)} clauses (risk + baseline + tips)...")
     if not clauses:
         return {
             **state,
@@ -144,6 +145,11 @@ def analyst_agent(state: AgentState) -> AgentState:
 
     severity_order = {"HIGH": 0, "MEDIUM": 1, "LOW": 2}
     all_analyzed.sort(key=lambda c: severity_order.get(c["severity"], 3))
+
+    high_c = sum(1 for c in all_analyzed if c["severity"] == "HIGH")
+    med_c = sum(1 for c in all_analyzed if c["severity"] == "MEDIUM")
+    low_c = sum(1 for c in all_analyzed if c["severity"] == "LOW")
+    print(f"[Analyst] Done. HIGH: {high_c}  MEDIUM: {med_c}  LOW: {low_c}")
 
     return {
         **state,

@@ -123,6 +123,7 @@ async def analyze_by_session(session_id: str):
                 document_type=doc["type"],
             )
             yield _sse({"event": "progress", "agent": "analyst", "message": f"Scoring {len(result.get('clauses', []))} clauses..."})
+            # Result is already logged to console by pipeline.run_analysis
             yield _sse({"event": "progress", "agent": "summarizer", "message": "Writing executive summary..."})
             result_store[session_id] = result
             yield _sse({

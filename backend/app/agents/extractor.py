@@ -73,6 +73,7 @@ def extractor_agent(state: AgentState) -> AgentState:
     Reads: document_text, document_name, document_type
     Writes: clauses
     """
+    print("[Extractor] Scanning document for legal clauses...")
     llm = ChatGoogleGenerativeAI(
         model="gemini-2.0-flash",
         temperature=0.1,
@@ -111,6 +112,7 @@ def extractor_agent(state: AgentState) -> AgentState:
                 location=item["location"],
             ))
 
+        print(f"[Extractor] Found {len(clauses)} clauses.")
         return {
             **state,
             "clauses": clauses,
