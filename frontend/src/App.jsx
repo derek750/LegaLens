@@ -1,10 +1,11 @@
 import React from 'react';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, useNavigate } from 'react-router-dom';
 import { Auth0Provider } from '@auth0/auth0-react';
 import Home from './pages/Home';
 import Dashboard from './pages/Dashboard';
 
-function App() {
+function Auth0ProviderWithCallback({ children }) {
+  const navigate = useNavigate();
   return (
     <Auth0Provider
       domain={import.meta.env.VITE_AUTH0_DOMAIN}
@@ -13,14 +14,25 @@ function App() {
         redirect_uri: window.location.origin,
         audience: import.meta.env.VITE_AUTH0_AUDIENCE,
       }}
+      onRedirectCallback={(appState) => {
+        navigate(appState?.returnTo ?? '/');
+      }}
     >
-      <BrowserRouter>
+      {children}
+    </Auth0Provider>
+  );
+}
+
+function App() {
+  return (
+    <BrowserRouter>
+      <Auth0ProviderWithCallback>
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/dashboard" element={<Dashboard />} />
         </Routes>
-      </BrowserRouter>
-    </Auth0Provider>
+      </Auth0ProviderWithCallback>
+    </BrowserRouter>
   );
 }
 

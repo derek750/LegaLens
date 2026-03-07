@@ -25,7 +25,7 @@ export default function Dashboard() {
     }, []);
 
     const filtered = documents.filter((doc) =>
-        doc.name.toLowerCase().includes(search.toLowerCase())
+        doc.filename.toLowerCase().includes(search.toLowerCase())
     );
     return (
         <Layout>
@@ -105,7 +105,7 @@ export default function Dashboard() {
                                 )}
                                 {filtered.map((doc, index) => (
                                     <motion.tr
-                                        key={doc.path || doc.name}
+                                        key={doc.id}
                                         initial={{ opacity: 0, y: 10 }}
                                         animate={{ opacity: 1, y: 0 }}
                                         transition={{ delay: index * 0.1 }}
@@ -114,8 +114,8 @@ export default function Dashboard() {
                                         <td className="py-4 px-6">
                                             <div className="flex items-center gap-3">
                                                 <DocumentTextIcon className="w-5 h-5 text-slate-400" />
-                                                <span className="font-medium text-slate-900 truncate max-w-xs block" title={doc.name}>
-                                                    {doc.name}
+                                                <span className="font-medium text-slate-900 truncate max-w-xs block" title={doc.filename}>
+                                                    {doc.filename}
                                                 </span>
                                             </div>
                                         </td>
@@ -123,7 +123,7 @@ export default function Dashboard() {
                                             {doc.created_at ? new Date(doc.created_at).toLocaleDateString() : '—'}
                                         </td>
                                         <td className="py-4 px-6 text-slate-500 text-sm">
-                                            {formatBytes(doc.metadata?.size)}
+                                            {formatBytes(doc.size_bytes)}
                                         </td>
                                         <td className="py-4 px-6 text-right">
                                             <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border bg-blue-50 text-blue-700 border-blue-200">

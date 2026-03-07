@@ -7,6 +7,8 @@ import jwt
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
+from app.db.users import upsert_profile
+
 logger = logging.getLogger(__name__)
 
 AUTH0_DOMAIN = os.environ["AUTH0_DOMAIN"]
@@ -46,7 +48,13 @@ def get_current_user(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
+    user_id = payload["sub"]
+    email = payload.get("email", "")
+
+    # Ensure user exists in the profiles table
+    upsert_profile(user_id, email)
+
     return {
-        "user_id": payload["sub"],
-        "email": payload.get("email", ""),
+        "user_id": user_id,
+        "email": email,
     }

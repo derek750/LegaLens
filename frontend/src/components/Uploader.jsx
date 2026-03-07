@@ -5,7 +5,7 @@ import { useAuth0 } from '@auth0/auth0-react';
 import { uploadDocument } from '../api.ts';
 
 const Uploader = () => {
-    const { isAuthenticated } = useAuth0();
+    const { isAuthenticated, loginWithRedirect } = useAuth0();
     const [file, setFile] = useState(null);
     const [isHovering, setIsHovering] = useState(false);
     const [isScanning, setIsScanning] = useState(false);
@@ -128,6 +128,11 @@ const Uploader = () => {
                         <p className="text-slate-500 max-w-sm mb-4">
                             Supported formats: PDF, DOC, DOCX. Maximum file size: 25MB. All files are securely processed and immediately deleted.
                         </p>
+                        {!isAuthenticated && (
+                            <p className="text-sm text-blue-600 font-medium">
+                                Sign in or create an account to scan and save documents to your dashboard.
+                            </p>
+                        )}
                     </motion.div>
                 ) : (
                     <motion.div
@@ -227,20 +232,30 @@ const Uploader = () => {
                         {/* Action Buttons */}
                         <div className="flex flex-col sm:flex-row gap-3">
                             {!scanComplete ? (
-                                <button
-                                    onClick={initiateScan}
-                                    disabled={isScanning}
-                                    className={`flex-1 py-3 px-6 rounded-xl font-semibold shadow-md transition-all ${isScanning
-                                        ? 'bg-blue-400 text-white cursor-not-allowed opacity-90'
-                                        : 'bg-blue-600 hover:bg-blue-700 text-white hover:shadow-lg active:scale-[0.98]'
-                                        } flex items-center justify-center gap-2`}
-                                >
-                                    {isScanning ? (
-                                        'Analyzing text...'
-                                    ) : (
-                                        'Scan for Predatory Clauses'
-                                    )}
-                                </button>
+                                isAuthenticated ? (
+                                    <button
+                                        onClick={initiateScan}
+                                        disabled={isScanning}
+                                        className={`flex-1 py-3 px-6 rounded-xl font-semibold shadow-md transition-all ${isScanning
+                                            ? 'bg-blue-400 text-white cursor-not-allowed opacity-90'
+                                            : 'bg-blue-600 hover:bg-blue-700 text-white hover:shadow-lg active:scale-[0.98]'
+                                            } flex items-center justify-center gap-2`}
+                                    >
+                                        {isScanning ? (
+                                            'Analyzing text...'
+                                        ) : (
+                                            'Scan for Predatory Clauses'
+                                        )}
+                                    </button>
+                                ) : (
+                                    <button
+                                        type="button"
+                                        onClick={() => loginWithRedirect({ appState: { returnTo: '/' } })}
+                                        className="flex-1 py-3 px-6 rounded-xl font-semibold bg-gray-900 hover:bg-gray-800 text-white shadow-md hover:shadow-lg transition-all active:scale-[0.98] flex items-center justify-center gap-2"
+                                    >
+                                        Sign in to scan documents
+                                    </button>
+                                )
                             ) : (
                                 <>
                                     <button className="flex-1 py-3 px-6 rounded-xl font-semibold bg-blue-600 hover:bg-blue-700 text-white shadow-md transition-all active:scale-[0.98]">

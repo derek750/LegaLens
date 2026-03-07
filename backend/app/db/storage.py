@@ -3,6 +3,11 @@ from app.db.client import supabase
 
 BUCKET_NAME = "legal documents"
 
+
+def _safe_user_id(user_id: str) -> str:
+    """Replace characters invalid in storage paths."""
+    return user_id.replace("|", "_")
+
 def ensure_bucket_exists() -> None:
     """Create the storage bucket if it doesn't already exist."""
     existing = [b.name for b in supabase.storage.list_buckets()]
@@ -12,8 +17,9 @@ def ensure_bucket_exists() -> None:
 
 def upload_pdf(file_bytes: bytes, original_filename: str, user_id: str) -> dict:
     """Upload a PDF to the documents bucket scoped to the user."""
+    safe_id = _safe_user_id(user_id)
     file_id = uuid.uuid4().hex
-    storage_path = f"{user_id}/{file_id}/{original_filename}"
+    storage_path = f"{safe_id}/{file_id}/{original_filename}"
 
     ensure_bucket_exists()
 
@@ -23,28 +29,27 @@ def upload_pdf(file_bytes: bytes, original_filename: str, user_id: str) -> dict:
         file_options={"content-type": "application/pdf"},
     )
 
+    # Record metadata in the documents table
+    supabase.table("documents").insert({
+        "user_id": user_id,
+        "bucket_path": storage_path,
+        "filename": original_filename,
+        "size_bytes": len(file_bytes),
+    }).execute()
+
     return {"bucket": BUCKET_NAME, "path": storage_path}
 
 
 def list_files(user_id: str) -> list[dict]:
-    """List all files belonging to a specific user in the bucket."""
-    ensure_bucket_exists()
-    storage = supabase.storage.from_(BUCKET_NAME)
-
-    # Top-level entries under the user folder are sub-folders (file_id UUIDs)
-    folders = storage.list(path=user_id)
-    files: list[dict] = []
-    for folder in folders:
-        folder_name = folder.get("name", "")
-        if not folder_name:
-            continue
-        sub_path = f"{user_id}/{folder_name}"
-        items = storage.list(path=sub_path)
-        for item in items:
-            if item.get("name"):
-                item["path"] = f"{sub_path}/{item['name']}"
-                files.append(item)
-    return files
+    """List all documents belonging to a specific user from the database."""
+    result = (
+        supabase.table("documents")
+        .select("id, filename, bucket_path, size_bytes, created_at")
+        .eq("user_id", user_id)
+        .order("created_at", desc=True)
+        .execute()
+    )
+    return result.data or []
 
 
 def get_signed_url(path: str, expires_in: int = 3600) -> str:
@@ -54,5 +59,6 @@ def get_signed_url(path: str, expires_in: int = 3600) -> str:
 
 
 def delete_file(path: str) -> None:
-    """Delete a file from the bucket."""
+    """Delete a file from the bucket and its database record."""
     supabase.storage.from_(BUCKET_NAME).remove([path])
+    supabase.table("documents").delete().eq("bucket_path", path).execute()

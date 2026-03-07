@@ -4,6 +4,7 @@ import { useAuth0 } from '@auth0/auth0-react';
 import { setTokenGetter } from '../api.ts';
 
 export default function Layout({ children }) {
+    const location = useLocation();
     const { user, isAuthenticated, loginWithRedirect, logout, getAccessTokenSilently } = useAuth0();
 
     useEffect(() => {
@@ -11,6 +12,13 @@ export default function Layout({ children }) {
             setTokenGetter(getAccessTokenSilently);
         }
     }, [isAuthenticated, getAccessTokenSilently]);
+
+    const handleLogin = (signUp = false) => {
+        loginWithRedirect({
+            authorizationParams: signUp ? { screen_hint: 'signup' } : undefined,
+            appState: { returnTo: location.pathname || '/' },
+        });
+    };
 
     return (
         <div className="min-h-screen bg-premium-gradient flex flex-col font-sans transition-colors duration-500">
@@ -40,8 +48,8 @@ export default function Layout({ children }) {
                         </>
                     ) : (
                         <>
-                            <button onClick={() => loginWithRedirect()} className="text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors">Log In</button>
-                            <button onClick={() => loginWithRedirect({ authorizationParams: { screen_hint: 'signup' } })} className="px-4 py-2 text-sm font-medium bg-gray-900 text-white rounded-lg hover:bg-gray-800 shadow-md hover:shadow-lg transition-all active:scale-95">
+                            <button onClick={() => handleLogin(false)} className="text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors">Log In</button>
+                            <button onClick={() => handleLogin(true)} className="px-4 py-2 text-sm font-medium bg-gray-900 text-white rounded-lg hover:bg-gray-800 shadow-md hover:shadow-lg transition-all active:scale-95">
                                 Get Started
                             </button>
                         </>
