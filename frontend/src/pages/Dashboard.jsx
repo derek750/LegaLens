@@ -45,7 +45,6 @@ export default function Dashboard() {
     const [consultantInput, setConsultantInput] = useState('');
     const [consultantSelectedDocId, setConsultantSelectedDocId] = useState('none');
     const [consultantSending, setConsultantSending] = useState(false);
-    const [consultantContextStatus, setConsultantContextStatus] = useState('');
     const [assistantSpeaking, setAssistantSpeaking] = useState(false);
     const [voiceStatus, setVoiceStatus] = useState('idle');
     const [voiceError, setVoiceError] = useState('');
@@ -684,12 +683,11 @@ export default function Dashboard() {
                     <div className="relative">
                         <div className="absolute inset-0 translate-x-[4px] translate-y-[4px] bg-[#17282E]/25" />
                         <div className="relative glass-panel border border-[#604B42]/25 p-8">
-                            <h3 className="text-xl font-semibold text-[#17282E] mb-2">
-                                LegaLens consultant
-                            </h3>
-
-                            <div className="flex flex-col md:flex-row gap-6 mb-6">
-                                <div className="w-full md:w-72">
+                            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+                                <h3 className="text-xl font-semibold text-[#17282E]">
+                                    LegaLens consultant
+                                </h3>
+                                <div className="w-full sm:w-72 sm:shrink-0">
                                     <label className="block text-xs font-semibold text-[#604B42] mb-1">
                                         Context document (optional)
                                     </label>
@@ -698,12 +696,11 @@ export default function Dashboard() {
                                         onChange={async (e) => {
                                             const value = e.target.value;
                                             setConsultantSelectedDocId(value);
-                                            setConsultantContextStatus('');
                                             if (value === 'none') return;
 
                                             const selectedDoc = documents.find((d) => d.id === value);
                                             if (!selectedDoc || !selectedDoc.bucket_path) {
-                                                setConsultantContextStatus('Could not load context document.');
+                                                setVoiceError('Could not load context document.');
                                                 return;
                                             }
 
@@ -714,16 +711,14 @@ export default function Dashboard() {
                                                     threadId = backboard.thread_id;
                                                     voiceBackboardThreadIdRef.current = threadId;
                                                 }
-                                                setConsultantContextStatus('Adding document context for your AI consultant…');
                                                 await addContextDocumentToVoiceThread({
                                                     thread_id: threadId,
                                                     bucket_path: selectedDoc.bucket_path,
                                                 });
-                                                setConsultantContextStatus(`Context loaded from "${selectedDoc.filename}".`);
                                             } catch (err) {
                                                 // eslint-disable-next-line no-console
                                                 console.error('Failed to add context document to voice thread', err);
-                                                setConsultantContextStatus(err?.message || 'Failed to add document context.');
+                                                setVoiceError(err?.message || 'Failed to add document context.');
                                             }
                                         }}
                                         className="pixel-input w-full px-3 py-2 bg-[#F5F0EC] text-sm text-[#17282E]"
@@ -735,15 +730,6 @@ export default function Dashboard() {
                                             </option>
                                         ))}
                                     </select>
-                                    <p className="mt-1 text-[11px] text-[#604B42]/80">
-                                        When you pick a document, LegaLens runs clause extraction and analysis on it
-                                        inside the same Backboard memory thread used by the voice consultant.
-                                    </p>
-                                    {consultantContextStatus && (
-                                        <p className="mt-1 text-[11px] text-[#604B42]">
-                                            {consultantContextStatus}
-                                        </p>
-                                    )}
                                 </div>
                             </div>
 
