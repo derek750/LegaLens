@@ -32,6 +32,36 @@ Document: {document_name} ({document_type})
 --- END ---"""
 
 
+def _compute_line_and_char_span(
+    document_text: str, snippet: str
+) -> Dict[str, int] | None:
+    """
+    Best-effort mapping of a clause's raw_text back to the original
+    extracted document text so the frontend can highlight it.
+
+    Returns a dict with:
+    - line_start / line_end: 1-based line numbers within document_text
+    - char_start / char_end: 0-based character offsets within document_text
+    """
+    if not snippet:
+        return None
+
+    char_start = document_text.find(snippet)
+    if char_start == -1:
+        return None
+
+    char_end = char_start + len(snippet)
+    line_start = document_text.count("\n", 0, char_start) + 1
+    line_end = document_text.count("\n", 0, char_end) + 1
+
+    return {
+        "line_start": line_start,
+        "line_end": line_end,
+        "char_start": char_start,
+        "char_end": char_end,
+    }
+
+
 async def run_extractor(
     document_text: str,
     document_name: str,
@@ -49,16 +79,22 @@ async def run_extractor(
     try:
         raw = await call_llm(extractor_llm(), prompt)
         raw = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw)
-        clauses = [
-            {
+        parsed = json.loads(raw)
+        clauses: List[Dict[str, Any]] = []
+        for c in parsed:
+            if not all(k in c for k in ["id", "type", "raw_text", "location"]):
+                continue
+            clause: Dict[str, Any] = {
                 "id": c["id"],
                 "type": c["type"],
                 "raw_text": c["raw_text"],
                 "location": c["location"],
             }
-            for c in json.loads(raw)
-            if all(k in c for k in ["id", "type", "raw_text", "location"])
-        ]
+            span = _compute_line_and_char_span(document_text, clause["raw_text"])
+            if span:
+                clause.update(span)
+            clauses.append(clause)
+
         print(f"  -> Found {len(clauses)} clauses")
         await backboard_save(
             thread_id,

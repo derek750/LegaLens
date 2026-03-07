@@ -163,6 +163,9 @@ async def run_analyst(
     canadian_law_context = await get_live_canadian_law(clauses, thread_id)
 
     all_analyzed: List[Dict[str, Any]] = []
+    clause_index: Dict[str, Dict[str, Any]] = {
+        c["id"]: c for c in clauses if isinstance(c, dict) and "id" in c
+    }
     # Single analysis call over all clauses instead of batching.
     prompt = ANALYST_PROMPT.format(
         document_name=document_name,
@@ -186,8 +189,19 @@ async def run_analyst(
             "negotiation_tip",
         ]
         for item in json.loads(raw):
-            if all(k in item for k in required):
-                all_analyzed.append({k: item[k] for k in required})
+            if not all(k in item for k in required):
+                continue
+            merged: Dict[str, Any] = {k: item[k] for k in required}
+
+            # Carry through source-text location info from extractor so the
+            # frontend can highlight issues directly on the original PDF.
+            original = clause_index.get(merged["id"])
+            if isinstance(original, dict):
+                for extra_key in ("line_start", "line_end", "char_start", "char_end"):
+                    if extra_key in original and extra_key not in merged:
+                        merged[extra_key] = original[extra_key]
+
+            all_analyzed.append(merged)
     except Exception as e:
         print(f"  -> Analyst error: {e}")
         for clause in clauses:
