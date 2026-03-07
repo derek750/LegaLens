@@ -110,8 +110,13 @@ const Uploader = () => {
                     <AnimatedHighlight text="predatory" highlightColor="rgba(248, 113, 113, 0.6)" />{' '}
                     clauses{' '}
                     <AnimatedHighlight
-                        text="before you sign."
+                        text="before you sign"
                         highlightColor="rgba(250, 204, 21, 0.6)"
+                        delayOffset={0.4}
+                    />{' '}, then{' '}
+                    <AnimatedHighlight
+                        text="negotiate."
+                        highlightColor="rgba(201, 232, 215, 0.85)"
                         delayOffset={0.4}
                     />
                 </h2>
@@ -125,7 +130,7 @@ const Uploader = () => {
                         initial={{ opacity: 0, scale: 0.95 }}
                         animate={{ opacity: 1, scale: 1 }}
                         exit={{ opacity: 0, scale: 0.95 }}
-                        className={`w-full relative rounded-3xl p-10 flex flex-col items-center justify-center text-center transition-all duration-300 ease-out border-2 border-dashed
+                        className={`w-full relative p-10 flex flex-col items-center justify-center text-center transition-all duration-300 ease-out border-2 border-dashed
               ${
                   isHovering
                       ? 'border-[#17282E] bg-[#17282E]/5 scale-[1.02]'
@@ -146,7 +151,7 @@ const Uploader = () => {
                             accept=".pdf,.doc,.docx"
                         />
 
-                        <div className={`p-5 rounded-full mb-6 transition-colors duration-300 ${isHovering ? 'bg-[#17282E]/10 text-[#17282E]' : 'bg-[#604B42]/10 text-[#604B42]'}`}>
+                        <div className={`p-5 mb-6 transition-colors duration-300 border-2 border-[#604B42]/30 ${isHovering ? 'bg-[#17282E]/10 text-[#17282E]' : 'bg-[#604B42]/10 text-[#604B42]'}`}>
                             <DocumentPlusIcon className="w-12 h-12" />
                         </div>
 
@@ -167,17 +172,17 @@ const Uploader = () => {
                         key="active-file"
                         initial={{ opacity: 0, y: 20 }}
                         animate={{ opacity: 1, y: 0 }}
-                        className="w-full bg-white shadow-xl rounded-3xl p-8 border border-slate-200"
+                        className="w-full bg-white pixel-card p-8"
                     >
                         {/* File Info */}
-                        <div className="flex items-start gap-4 p-4 rounded-2xl bg-[#F5F0EC] border border-[#604B42]/20 mb-6">
-                            <div className="p-3 bg-[#17282E]/10 text-[#17282E] rounded-xl relative">
+                        <div className="flex items-start gap-4 p-4 bg-[#F5F0EC] border border-[#604B42]/20 mb-6">
+                            <div className="p-3 bg-[#17282E]/10 text-[#17282E] relative border border-[#17282E]/20">
                                 <DocumentTextIcon className="w-8 h-8" />
                                 {scanComplete && (
                                     <motion.div
                                         initial={{ scale: 0 }}
                                         animate={{ scale: 1 }}
-                                        className="absolute -top-2 -right-2 bg-green-500 text-white rounded-full p-0.5"
+                                        className="absolute -top-2 -right-2 bg-green-500 text-white p-0.5 border border-[#17282E]"
                                     >
                                         <CheckCircleIcon className="w-5 h-5" />
                                     </motion.div>
@@ -195,7 +200,7 @@ const Uploader = () => {
                             {!isScanning && !scanComplete && (
                                 <button
                                     onClick={(e) => { e.stopPropagation(); resetUploader(); }}
-                                    className="text-[#604B42]/60 hover:text-red-500 p-2 transition-colors rounded-lg hover:bg-[#F5F0EC]"
+                                    className="text-[#604B42]/60 hover:text-red-500 p-2 transition-colors hover:bg-[#F5F0EC]"
                                 >
                                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
                                         <path fillRule="evenodd" d="M5.47 5.47a.75.75 0 011.06 0L12 10.94l5.47-5.47a.75.75 0 111.06 1.06L13.06 12l5.47 5.47a.75.75 0 11-1.06 1.06L12 13.06l-5.47 5.47a.75.75 0 01-1.06-1.06L10.94 12 5.47 6.53a.75.75 0 010-1.06z" clipRule="evenodd" />
@@ -205,7 +210,7 @@ const Uploader = () => {
                         </div>
 
                         {uploadError && (
-                            <div className="mb-6 p-4 bg-red-50 text-red-700 border border-red-200 rounded-lg text-sm">
+                            <div className="mb-6 p-4 bg-red-50 text-red-700 border border-red-200 text-sm">
                                 {uploadError}
                             </div>
                         )}
@@ -226,9 +231,9 @@ const Uploader = () => {
                                         </span>
                                         <span className="text-slate-500 font-medium">{Math.min(simulatedProgress, 100)}%</span>
                                     </div>
-                                    <div className="w-full bg-[#F5F0EC] rounded-full h-2.5 overflow-hidden">
+                                    <div className="w-full bg-[#F5F0EC] h-2.5 overflow-hidden border border-[#604B42]/30">
                                         <motion.div
-                                            className="bg-[#17282E] h-full rounded-full w-fullorigin-left"
+                                            className="bg-[#17282E] h-full w-fullorigin-left"
                                             initial={{ width: 0 }}
                                             animate={{ width: `${Math.min(simulatedProgress, 100)}%` }}
                                             transition={{ ease: "linear" }}
@@ -243,7 +248,7 @@ const Uploader = () => {
                             <motion.div
                                 initial={{ opacity: 0, y: 10 }}
                                 animate={{ opacity: 1, y: 0 }}
-                                className="mb-8 p-5 bg-yellow-50 text-yellow-800 border-l-4 border-yellow-400 rounded-r-lg"
+                                className="mb-8 p-5 bg-yellow-50 text-yellow-800 border-l-4 border-yellow-400"
                             >
                                 <div className="flex items-start gap-3">
                                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6 shrink-0 mt-0.5text-yellow-500">
@@ -264,7 +269,7 @@ const Uploader = () => {
                                     <button
                                         onClick={initiateScan}
                                         disabled={isScanning}
-                                        className={`flex-1 py-3 px-6 rounded-xl font-semibold shadow-md transition-all ${isScanning
+                                        className={`flex-1 py-3 px-6 pixel-button font-semibold transition-all ${isScanning
                                             ? 'bg-[#17282E]/70 text-white cursor-not-allowed opacity-90'
                                             : 'bg-[#17282E] hover:bg-[#17282E] text-white hover:shadow-lg active:scale-[0.98]'
                                             } flex items-center justify-center gap-2`}
@@ -279,19 +284,19 @@ const Uploader = () => {
                                     <button
                                         type="button"
                                         onClick={() => loginWithRedirect({ appState: { returnTo: '/' } })}
-                                        className="flex-1 py-3 px-6 rounded-xl font-semibold bg-[#17282E] hover:bg-[#17282E] text-white shadow-md hover:shadow-lg transition-all active:scale-[0.98] flex items-center justify-center gap-2"
+                                        className="flex-1 py-3 px-6 pixel-button font-semibold bg-[#17282E] hover:bg-[#17282E] text-white transition-all active:scale-[0.98] flex items-center justify-center gap-2"
                                     >
                                         Sign in to scan documents
                                     </button>
                                 )
                             ) : (
                                 <>
-                                    <button className="flex-1 py-3 px-6 rounded-xl font-semibold bg-[#17282E] hover:bg-[#17282E] text-white shadow-md transition-all active:scale-[0.98]">
+                                    <button className="flex-1 py-3 px-6 pixel-button font-semibold bg-[#17282E] hover:bg-[#17282E] text-white transition-all active:scale-[0.98]">
                                         View Detailed Report
                                     </button>
                                     <button
                                         onClick={resetUploader}
-                                        className="py-3 px-6 rounded-xl font-semibold bg-[#F5F0EC] hover:bg-[#EBE6E3] text-[#17282E] transition-all active:scale-[0.98]"
+                                        className="py-3 px-6 pixel-button font-semibold bg-[#F5F0EC] hover:bg-[#EBE6E3] text-[#17282E] transition-all active:scale-[0.98]"
                                     >
                                         Scan Another
                                     </button>

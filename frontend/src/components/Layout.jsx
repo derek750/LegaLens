@@ -22,9 +22,9 @@ export default function Layout({ children }) {
 
     return (
         <div className="min-h-screen bg-[#EBE6E3] text-[#17282E] flex flex-col font-sans">
-            <header className="sticky top-0 z-50 bg-[#17282E] text-[#EBE6E3] border-b border-[#604B42]/40 px-6 py-4 flex items-center justify-between">
+            <header className="sticky top-0 z-50 bg-[#17282E] text-[#EBE6E3] border-b-4 border-[#4F3D35] shadow-[0_4px_0_0_#604B42] px-6 py-4 flex items-center justify-between">
                 <Link to="/" className="flex items-center gap-3 cursor-pointer group">
-                    <div className="w-10 h-10 rounded-full border border-[#EBE6E3]/30 bg-[#17282E] flex items-center justify-center text-[#EBE6E3] shadow-sm group-hover:scale-105 transition-transform">
+                    <div className="w-10 h-10 pixel-card bg-[#17282E] flex items-center justify-center text-[#EBE6E3] group-hover:translate-y-[1px] transition-transform">
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-6 h-6">
                             <path
                                 strokeLinecap="round"
@@ -82,7 +82,7 @@ export default function Layout({ children }) {
                             </button>
                             <button
                                 onClick={() => handleLogin(true)}
-                                className="px-4 py-2 text-sm font-medium bg-[#EBE6E3] text-[#17282E] rounded-full shadow-sm hover:shadow-md transition-all active:scale-95"
+                                className="px-4 py-2 text-sm font-medium bg-[#EBE6E3] text-[#17282E] pixel-button transition-all"
                             >
                                 Get Started
                             </button>

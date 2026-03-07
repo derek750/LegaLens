@@ -52,6 +52,26 @@ def list_files(user_id: str) -> list[dict]:
     return result.data or []
 
 
+def get_document_by_path(path: str, user_id: str) -> dict | None:
+    """Return document row if path exists and belongs to user."""
+    result = (
+        supabase.table("documents")
+        .select("id, filename, bucket_path, size_bytes, created_at")
+        .eq("bucket_path", path)
+        .eq("user_id", user_id)
+        .limit(1)
+        .execute()
+    )
+    rows = result.data or []
+    return rows[0] if rows else None
+
+
+def download_file(path: str) -> bytes:
+    """Download file bytes from storage. Caller must verify ownership first."""
+    data = supabase.storage.from_(BUCKET_NAME).download(path)
+    return data
+
+
 def get_signed_url(path: str, expires_in: int = 3600) -> str:
     """Generate a temporary signed URL for a stored file."""
     res = supabase.storage.from_(BUCKET_NAME).create_signed_url(path, expires_in)

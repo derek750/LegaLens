@@ -35,6 +35,12 @@ SILENCE_DURATION_SEC = float(os.getenv("VOICE_SILENCE_DURATION_SEC", "1.2"))
 SILENCE_ENERGY_THRESHOLD = float(os.getenv("VOICE_SILENCE_ENERGY_THRESHOLD", "0.01"))
 MIN_UTTERANCE_SEC = float(os.getenv("VOICE_MIN_UTTERANCE_SEC", "0.3"))
 
+# Default to the bundled "Hey Consultant" Porcupine keyword file if present.
+_DEFAULT_KEYWORD_PATH = os.path.join(
+    os.path.dirname(__file__),
+    "Hey-Consultant_en_wasm_v4_0_0.ppn",
+)
+
 # Lazily-created global input stream so we only open the microphone once.
 _audio_stream: Optional[sd.InputStream] = None
 
@@ -229,11 +235,12 @@ async def hotword_listener_loop() -> None:
     """
     access_key = os.environ["PICOVOICE_ACCESS_KEY"]
 
-    # For a real "Hey Assistant" experience you would export a custom
-    # keyword from Picovoice Console and pass its .ppn path via
-    # the PORCUPINE_KEYWORD_PATH env var.
-    keyword_path = os.getenv("PORCUPINE_KEYWORD_PATH")
-    if keyword_path:
+    # Prefer an explicit keyword path from the environment, otherwise fall back
+    # to the bundled "Hey Consultant" keyword if it exists. As a last resort,
+    # use the built-in "porcupine" keyword.
+    keyword_path = os.getenv("PORCUPINE_KEYWORD_PATH") or _DEFAULT_KEYWORD_PATH
+
+    if os.path.exists(keyword_path):
         porcupine = pvporcupine.create(
             access_key=access_key,
             keyword_paths=[keyword_path],
