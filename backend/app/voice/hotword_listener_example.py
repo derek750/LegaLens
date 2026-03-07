@@ -10,10 +10,11 @@ hand-off clear.
 
 import asyncio
 import os
-from typing import List
+from typing import List, Optional
 
 import httpx
 import pvporcupine
+import sounddevice as sd
 
 
 VOICE_SESSION_URL = os.getenv(
@@ -22,19 +23,43 @@ VOICE_SESSION_URL = os.getenv(
 )
 INTERNAL_API_KEY = os.getenv("VOICE_AGENT_API_KEY", "dev-voice-agent-key")
 
+# Lazily-created global input stream so we only open the microphone once.
+_audio_stream: Optional[sd.InputStream] = None
+
+
+def _ensure_audio_stream(sample_rate: int, frame_length: int) -> sd.InputStream:
+    """
+    Create and start a shared sounddevice.InputStream if it doesn't exist yet.
+    """
+    global _audio_stream
+
+    if _audio_stream is None:
+        _audio_stream = sd.InputStream(
+            samplerate=sample_rate,
+            channels=1,
+            dtype="int16",
+            blocksize=frame_length,
+        )
+        _audio_stream.start()
+
+    return _audio_stream
+
 
 def read_single_frame_from_microphone(
     frame_length: int,
     sample_rate: int,
 ) -> List[int]:
     """
-    Replace this placeholder with real microphone capture code.
+    Capture a single frame of 16‑bit PCM audio from the default microphone.
 
-    It should return a list[int] of 16‑bit PCM samples with length == frame_length.
-    See the official Porcupine Python demos for a complete example:
-    https://github.com/Picovoice/porcupine/tree/master/demo/python
+    Returns a list[int] with length == frame_length suitable for Porcupine.
     """
-    raise NotImplementedError("Wire this up to PyAudio or sounddevice.")
+    stream = _ensure_audio_stream(sample_rate=sample_rate, frame_length=frame_length)
+
+    # sounddevice returns a NumPy array of shape (frame_length, channels)
+    frames, _ = stream.read(frame_length)
+    mono = frames[:, 0]  # first (and only) channel
+    return mono.astype("int16").tolist()
 
 
 async def trigger_voice_session() -> None:
@@ -102,6 +127,12 @@ async def hotword_listener_loop() -> None:
                 await trigger_voice_session()
     finally:
         porcupine.delete()
+        # Clean up audio resources if we created a stream.
+        global _audio_stream
+        if _audio_stream is not None:
+            _audio_stream.stop()
+            _audio_stream.close()
+            _audio_stream = None
 
 
 if __name__ == "__main__":
