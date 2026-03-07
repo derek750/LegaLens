@@ -4,6 +4,26 @@ import { DocumentPlusIcon, DocumentTextIcon, CheckCircleIcon, ArrowPathIcon } fr
 import { useAuth0 } from '@auth0/auth0-react';
 import { uploadDocument } from '../api.ts';
 
+const AnimatedHighlight = ({ text, highlightColor, delayOffset = 0 }) => (
+    <span className="inline-block">
+        {text.split('').map((char, index) => (
+            <motion.span
+                key={index}
+                className="inline-block"
+                initial={{ color: '#17282E', backgroundColor: 'rgba(0,0,0,0)' }}
+                animate={{ backgroundColor: highlightColor }}
+                transition={{
+                    duration: 1.5,
+                    delay: delayOffset + index * 0.12,
+                    ease: 'easeOut',
+                }}
+            >
+                {char === ' ' ? '\u00A0' : char}
+            </motion.span>
+        ))}
+    </span>
+);
+
 const Uploader = () => {
     const { isAuthenticated, loginWithRedirect } = useAuth0();
     const [file, setFile] = useState(null);
@@ -86,7 +106,14 @@ const Uploader = () => {
             {/* Introduction text */}
             <div className="text-center mb-10 w-full">
                 <h2 className="text-3xl md:text-5xl font-semibold text-[#17282E] mb-6 leading-tight tracking-tight">
-                    Find predatory clauses before you <span className="text-[#604B42]">sign.</span>
+                    Find{' '}
+                    <AnimatedHighlight text="predatory" highlightColor="rgba(248, 113, 113, 0.6)" />{' '}
+                    clauses{' '}
+                    <AnimatedHighlight
+                        text="before you sign."
+                        highlightColor="rgba(250, 204, 21, 0.6)"
+                        delayOffset={0.4}
+                    />
                 </h2>
             </div>
 
