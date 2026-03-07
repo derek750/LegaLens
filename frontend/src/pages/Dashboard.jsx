@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { DocumentTextIcon, MagnifyingGlassIcon } from '@heroicons/react/24/outline';
 import Layout from '../components/Layout';
-import { listDocuments } from '../api.ts';
+import { listDocuments, getDocumentUrl } from '../api.ts';
 
 function formatBytes(bytes) {
     if (!bytes) return '—';
@@ -17,6 +17,8 @@ export default function Dashboard() {
     const [error, setError] = useState('');
     const [search, setSearch] = useState('');
     const [activeTab, setActiveTab] = useState('overview');
+    const [viewingId, setViewingId] = useState(null);
+    const [viewError, setViewError] = useState('');
 
     useEffect(() => {
         listDocuments()
@@ -28,6 +30,23 @@ export default function Dashboard() {
     const filtered = documents.filter((doc) =>
         doc.filename.toLowerCase().includes(search.toLowerCase())
     );
+
+    const handleView = async (doc) => {
+        setViewError('');
+        setViewingId(doc.id);
+        try {
+            const data = await getDocumentUrl(doc.bucket_path);
+            if (data.url) {
+                window.open(data.url, '_blank', 'noopener');
+            } else {
+                setViewError('Could not generate a link for this document.');
+            }
+        } catch (err) {
+            setViewError(err.message || 'Failed to open document');
+        } finally {
+            setViewingId(null);
+        }
+    };
     return (
         <Layout>
             <div className="w-full max-w-6xl mx-auto">
@@ -161,9 +180,19 @@ export default function Dashboard() {
                                                     {formatBytes(doc.size_bytes)}
                                                 </td>
                                                 <td className="py-4 px-6 text-right">
-                                                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border bg-[#F5F0EC] text-[#17282E] border-[#604B42]/40">
-                                                        Uploaded
-                                                    </span>
+                                                    <div className="flex items-center justify-end gap-3">
+                                                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border bg-[#F5F0EC] text-[#17282E] border-[#604B42]/40">
+                                                            Uploaded
+                                                        </span>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleView(doc)}
+                                                            className="text-xs font-medium text-[#17282E] hover:text-[#604B42] underline-offset-2 hover:underline disabled:opacity-60"
+                                                            disabled={viewingId === doc.id}
+                                                        >
+                                                            {viewingId === doc.id ? 'Opening…' : 'View'}
+                                                        </button>
+                                                    </div>
                                                 </td>
                                             </motion.tr>
                                         ))}
@@ -172,9 +201,14 @@ export default function Dashboard() {
                             </div>
 
                             <div className="p-4 border-t border-[#604B42]/20 bg-[#F5F0EC] text-center">
-                                <button className="text-sm font-medium text-[#604B42] hover:text-[#17282E] transition-colors">
-                                    View All Documents
-                                </button>
+                                <div className="flex flex-col items-center gap-2">
+                                    {viewError && (
+                                        <p className="text-xs text-red-600">{viewError}</p>
+                                    )}
+                                    <button className="text-sm font-medium text-[#604B42] hover:text-[#17282E] transition-colors">
+                                        View All Documents
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     </>

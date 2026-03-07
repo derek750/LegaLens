@@ -48,3 +48,10 @@ export async function listDocuments() {
   if (!res.ok) throw new Error(data.detail || "Failed to fetch documents");
   return data;
 }
+
+export async function getDocumentUrl(path: string) {
+  const res = await apiFetch(`/documents/url?path=${encodeURIComponent(path)}`);
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.detail || "Failed to get document URL");
+  return data as { url: string };
+}
