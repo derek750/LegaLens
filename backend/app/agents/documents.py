@@ -3,7 +3,7 @@ from typing import Any, Dict
 
 import PyPDF2
 import docx as python_docx
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.embeddings import FakeEmbeddings
 from langchain_community.vectorstores import FAISS
 
