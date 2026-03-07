@@ -1,9 +1,13 @@
 import os
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Response, status
+from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Response, UploadFile, status
 from pydantic import BaseModel
 
-from app.voice.voice import text_to_speech_internal
+from app.voice.voice import (
+    run_qa_remote,
+    speech_to_text_internal,
+    text_to_speech_internal,
+)
 
 router = APIRouter(prefix="/voice", tags=["voice"])
 
@@ -49,5 +53,34 @@ async def text_to_speech(
         content=audio_bytes,
         media_type="audio/mpeg",
     )
+
+
+@router.post("/turn")
+async def voice_turn(
+    session_id: str = Form(..., description="Document session ID for QA (Gemini + Backboard)."),
+    audio: UploadFile = File(..., description="Recorded audio (user utterance). Send only after user stops talking."),
+    language_code: str | None = Form(None),
+    _: None = Depends(_verify_internal_api_key),
+):
+    """
+    One voice turn: STT on the uploaded audio → Gemini + Backboard (QA) → TTS.
+
+    Call this only when the user has **finished speaking** (e.g. after silence).
+    Thinking runs once per turn, not while the user is still talking.
+    """
+    audio_bytes = await audio.read()
+    transcript = await speech_to_text_internal(
+        audio_bytes,
+        language_code=language_code,
+    )
+    if not transcript:
+        fallback = "I didn't catch that. Try again when you're ready."
+        audio_bytes = await text_to_speech_internal(text=fallback)
+        return Response(content=audio_bytes, media_type="audio/mpeg")
+    answer = await run_qa_remote(session_id, transcript)
+    if not answer:
+        answer = "I couldn't get an answer for that."
+    audio_bytes = await text_to_speech_internal(text=answer)
+    return Response(content=audio_bytes, media_type="audio/mpeg")
 
 

@@ -1,5 +1,7 @@
 import os
+import tempfile
 
+import httpx
 from elevenlabs.client import AsyncElevenLabs  # type: ignore[import-not-found]
 from fastapi import HTTPException, status
 
@@ -68,4 +70,58 @@ async def text_to_speech_internal(
         status_code=status.HTTP_502_BAD_GATEWAY,
         detail="Unexpected TTS response format from ElevenLabs.",
     )
+
+
+async def speech_to_text_internal(
+    audio_bytes: bytes,
+    *,
+    language_code: str | None = None,
+) -> str:
+    """
+    Transcribe audio using ElevenLabs STT. Returns the transcript text.
+    """
+    client = get_elevenlabs_client()
+    # SDK typically expects a file path or file-like for multipart upload
+    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
+        f.write(audio_bytes)
+        path = f.name
+    try:
+        with open(path, "rb") as f:
+            response = await client.speech_to_text.convert(
+                file=f,
+                model_id="scribe_v2",
+                language_code=language_code,
+            )
+    finally:
+        try:
+            os.unlink(path)
+        except OSError:
+            pass
+    # Response is typically an object with .text or similar
+    if hasattr(response, "text"):
+        return (response.text or "").strip()
+    if isinstance(response, dict):
+        return (response.get("text") or "").strip()
+    if isinstance(response, str):
+        return response.strip()
+    return ""
+
+
+def get_qa_base_url() -> str:
+    """Base URL for the QA service (Agents app). Thinking runs only when user is done talking."""
+    return os.getenv("LEGALENS_QA_BASE_URL", "http://localhost:8000")
+
+
+async def run_qa_remote(session_id: str, question: str) -> str:
+    """
+    Call the QA endpoint (Gemini + Backboard). Used after STT so we only
+    run thinking when the user has finished speaking.
+    """
+    base = get_qa_base_url().rstrip("/")
+    url = f"{base}/qa/{session_id}"
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        resp = await client.post(url, json={"question": question})
+        resp.raise_for_status()
+        data = resp.json()
+        return data.get("answer", "")
 
