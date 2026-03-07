@@ -205,6 +205,14 @@ async def add_context_document_to_thread(
 
     doc_type = detect_document_type(text)
 
+    # Save document identity so the consultant prompt can say "the contract is X"
+    from app.agents.backboard import backboard_save
+    await backboard_save(
+        thread_id,
+        "assistant",
+        f"CONTEXT_DOCUMENT: {filename} ({doc_type})",
+    )
+
     # 1) Extract clauses into this existing Backboard thread
     clauses = await run_extractor(text, filename, doc_type, thread_id)
 

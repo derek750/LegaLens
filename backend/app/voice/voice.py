@@ -136,14 +136,17 @@ async def run_qa_remote(session_id: str, question: str) -> str:
         return data.get("answer", "")
 
 
-# Prompt for voice consultant when no document is in context (Gemini + Backboard, global law only).
+# Prompt for voice consultant. Uses Backboard thread: Canadian law, optional clauses (EXTRACTOR/ANALYST), and Q&A history.
 CONSULTANT_PROMPT = """You are a Canadian legal information consultant for LegaLens (voice assistant).
 Answer in plain English, 2–4 sentences. Be helpful and accurate; say when you are unsure.
 
-Canadian law context:
+Canadian law context (for general principles only):
 {canadian_law}
-
+{document_context}
 {history}User question: {question}"""
+
+# Max chars of document context (EXTRACTOR + ANALYST) to avoid overflowing the prompt.
+DOCUMENT_CONTEXT_MAX_CHARS = 24_000
 
 
 async def run_voice_think(
@@ -176,9 +179,48 @@ async def run_voice_think(
             await backboard_save(thread_id, "assistant", f"Q&A — Answer: {answer}")
         return answer or "I couldn’t get an answer for that document. Try rephrasing or select a document first."
 
-    # Consultant path: global law + this Backboard thread only (new thread + global context).
+    # Consultant path: global law + this Backboard thread (including EXTRACTOR/ANALYST if context doc was added).
     canadian_law = await backboard_get_global_law_context(thread_id)
     history = await backboard_get_history(thread_id)
+
+    # Include document context from this thread so the agent can use extracted/analyzed clauses.
+    context_doc_line = ""
+    extractor_parts = []
+    analyst_parts = []
+    for m in history:
+        content = m.get("content") or ""
+        if not isinstance(content, str):
+            continue
+        if content.startswith("CONTEXT_DOCUMENT:"):
+            context_doc_line = content.strip()
+        elif content.startswith("EXTRACTOR:"):
+            extractor_parts.append(content)
+        elif content.startswith("ANALYST:"):
+            analyst_parts.append(content)
+    doc_parts = []
+    if extractor_parts:
+        doc_parts.append(extractor_parts[-1])
+    if analyst_parts:
+        doc_parts.append(analyst_parts[-1])
+    document_context_str = "\n\n".join(doc_parts)
+    if len(document_context_str) > DOCUMENT_CONTEXT_MAX_CHARS:
+        document_context_str = document_context_str[: DOCUMENT_CONTEXT_MAX_CHARS] + "\n\n[truncated]"
+    if document_context_str:
+        doc_identity = context_doc_line.replace("CONTEXT_DOCUMENT:", "").strip() if context_doc_line else "the user's document"
+        document_context_str = (
+            "--- CONTRACT TO USE RIGHT NOW (only source for this conversation) ---\n"
+            "Document: "
+            + doc_identity
+            + "\n\n"
+            "The following is the ONLY contract information you have. It is the clause extraction and risk analysis "
+            "uploaded to this conversation. Look at this and only this when answering questions about the contract. "
+            "Do not refer to or infer from anything else. Do not say you cannot see or identify the contract.\n\n"
+            + document_context_str
+            + "\n--- END CONTRACT ---\n\n"
+        )
+    else:
+        document_context_str = ""
+
     past_qa = [m.get("content", "") for m in history if isinstance(m.get("content"), str) and m["content"].startswith("Q&A")]
     history_str = ""
     if past_qa:
@@ -186,6 +228,7 @@ async def run_voice_think(
 
     prompt = CONSULTANT_PROMPT.format(
         canadian_law=canadian_law,
+        document_context=document_context_str,
         history=history_str,
         question=user_utterance.strip(),
     )
