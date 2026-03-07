@@ -3,6 +3,8 @@ LegalLens — LangGraph Pipeline
 Orchestrates Extractor → Analyst → Summarizer; Q&A sub-graph.
 """
 
+import os
+import asyncio
 from langgraph.graph import StateGraph, END
 
 from app.agents.console_log import log_analysis_result
@@ -10,6 +12,16 @@ from app.agents.state import AgentState
 from app.agents.extractor import extractor_agent
 from app.agents.analyst import analyst_agent
 from app.agents.summarizer import summarizer_agent, qa_agent
+
+# Seconds to wait between pipeline steps (helps avoid Gemini rate limits). Set to 0 to disable.
+AGENT_DELAY_SECONDS = max(0, int(os.environ.get("AGENT_DELAY_SECONDS", "2")))
+
+
+async def _delay_node(state: AgentState) -> AgentState:
+    """No-op node that waits before the next agent runs."""
+    if AGENT_DELAY_SECONDS > 0:
+        await asyncio.sleep(AGENT_DELAY_SECONDS)
+    return state
 
 
 def should_continue_after_extraction(state: AgentState) -> str:
@@ -21,18 +33,22 @@ def should_continue_after_extraction(state: AgentState) -> str:
 
 
 def build_analysis_graph() -> StateGraph:
-    """Full document analysis: extractor → analyst → summarizer."""
+    """Full document analysis: extractor → [delay] → analyst → [delay] → summarizer."""
     graph = StateGraph(AgentState)
     graph.add_node("extractor", extractor_agent)
+    graph.add_node("delay_before_analyst", _delay_node)
+    graph.add_node("delay_before_summarizer", _delay_node)
     graph.add_node("analyst", analyst_agent)
     graph.add_node("summarizer", summarizer_agent)
     graph.set_entry_point("extractor")
     graph.add_conditional_edges(
         "extractor",
         should_continue_after_extraction,
-        {"analyst": "analyst", "summarizer": "summarizer"},
+        {"analyst": "delay_before_analyst", "summarizer": "summarizer"},
     )
-    graph.add_edge("analyst", "summarizer")
+    graph.add_edge("delay_before_analyst", "analyst")
+    graph.add_edge("analyst", "delay_before_summarizer")
+    graph.add_edge("delay_before_summarizer", "summarizer")
     graph.add_edge("summarizer", END)
     return graph.compile()
 
