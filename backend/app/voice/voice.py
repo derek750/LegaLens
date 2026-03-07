@@ -34,6 +34,16 @@ def get_tts_voice_id() -> str:
     return os.getenv("ELEVENLABS_VOICE_ID", DEFAULT_VOICE_ID)
 
 
+def get_convai_agent_id() -> str:
+    """
+    Return the ElevenLabs Conversational AI agent id used for real-time voice.
+
+    Configure ELEVENLABS_CONVAI_AGENT_ID in your backend .env with the agent id
+    from the ElevenLabs dashboard.
+    """
+    return _get_required_env("ELEVENLABS_CONVAI_AGENT_ID")
+
+
 async def text_to_speech_internal(
     text: str,
     voice_id: str | None = None,
@@ -186,4 +196,54 @@ async def run_voice_think(
         return answer
     except Exception as e:
         return f"Sorry, I couldn’t complete that. ({e!s})"
+
+
+async def create_voice_session_internal() -> dict:
+    """
+    Create a new ElevenLabs WebRTC conversation token for the configured agent.
+
+    This calls ElevenLabs GET /v1/convai/conversation/token with:
+      - xi-api-key: ELEVENLABS_API_KEY
+      - agent_id: ELEVENLABS_CONVAI_AGENT_ID
+
+    Returns a dict shaped for the frontend Conversation.startSession call:
+      { "agent_id", "webrtc_token", "connection_type" }.
+    """
+    api_key = _get_required_env("ELEVENLABS_API_KEY")
+    agent_id = get_convai_agent_id()
+    base_url = os.getenv("ELEVENLABS_BASE_URL", "https://api.elevenlabs.io").rstrip("/")
+    url = f"{base_url}/v1/convai/conversation/token"
+
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        try:
+            resp = await client.get(
+                url,
+                params={"agent_id": agent_id},
+                headers={"xi-api-key": api_key},
+            )
+            resp.raise_for_status()
+        except httpx.HTTPStatusError as e:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=f"ElevenLabs conversation token request failed: {e.response.text}",
+            ) from e
+        except httpx.HTTPError as e:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=f"Could not reach ElevenLabs for conversation token: {e}",
+            ) from e
+
+        data = resp.json()
+        token = data.get("token")
+        if not token:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail="ElevenLabs did not return a WebRTC token.",
+            )
+
+        return {
+            "agent_id": agent_id,
+            "webrtc_token": token,
+            "connection_type": "webrtc",
+        }
 

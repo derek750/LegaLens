@@ -5,6 +5,7 @@ from pydantic import BaseModel
 
 from app.agents.backboard import backboard_create_thread
 from app.voice.voice import (
+    create_voice_session_internal,
     run_qa_remote,
     run_voice_think,
     speech_to_text_internal,
@@ -55,6 +56,21 @@ async def text_to_speech(
         content=audio_bytes,
         media_type="audio/mpeg",
     )
+
+
+@router.post("/session")
+async def create_voice_session(
+    _: None = Depends(_verify_internal_api_key),
+):
+    """
+    Create a new ElevenLabs WebRTC voice session for the configured agent.
+
+    Returns:
+      { \"agent_id\", \"webrtc_token\", \"connection_type\" }
+    which the frontend passes to @elevenlabs/client Conversation.startSession.
+    """
+    session = await create_voice_session_internal()
+    return session
 
 
 @router.post("/turn")
