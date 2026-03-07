@@ -1,8 +1,10 @@
 import os
-from typing import Optional
 
 from elevenlabs.client import AsyncElevenLabs  # type: ignore[import-not-found]
 from fastapi import HTTPException, status
+
+# Default voice ID (Rachel) if ELEVENLABS_VOICE_ID is not set
+DEFAULT_VOICE_ID = "8j7CWNNX7AHcdYYxls2E"
 
 
 def _get_required_env(name: str) -> str:
@@ -25,32 +27,45 @@ def get_elevenlabs_client() -> AsyncElevenLabs:
     return AsyncElevenLabs(api_key=api_key)
 
 
-async def create_voice_session_internal(agent_id_env: str = "AGENT_ID") -> dict:
+def get_tts_voice_id() -> str:
+    """Return the voice ID for TTS (env ELEVENLABS_VOICE_ID or default)."""
+    return os.getenv("ELEVENLABS_VOICE_ID", DEFAULT_VOICE_ID)
+
+
+async def text_to_speech_internal(
+    text: str,
+    voice_id: str | None = None,
+    model_id: str = "eleven_multilingual_v2",
+    output_format: str = "mp3_44100_128",
+) -> bytes:
     """
-    Internal helper used by the FastAPI router to create a short-lived
-    ElevenLabs conversational session and return connection details.
+    Convert text to speech using ElevenLabs TTS only (no conversational session).
+    Returns raw audio bytes (e.g. MP3). The brain (Gemini + Backboard) is separate.
     """
-    agent_id = _get_required_env(agent_id_env)
-    client = get_elevenlabs_client()
-
-    # For private agents, ElevenLabs requires a WebRTC token.
-    token_response = await client.conversational_ai.conversations.get_webrtc_token(
-        agent_id=agent_id,
-    )
-
-    token: Optional[str] = getattr(token_response, "token", None)
-    if token is None and isinstance(token_response, dict):
-        token = token_response.get("token")
-
-    if not token:
+    if not text or not text.strip():
         raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Failed to obtain a WebRTC token from ElevenLabs.",
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Text is required for TTS.",
         )
-
-    return {
-        "agent_id": agent_id,
-        "webrtc_token": token,
-        "connection_type": "webrtc",
-    }
+    client = get_elevenlabs_client()
+    vid = voice_id or get_tts_voice_id()
+    response = await client.text_to_speech.convert(
+        voice_id=vid,
+        text=text.strip(),
+        model_id=model_id,
+        output_format=output_format,
+    )
+    # SDK may return bytes, a stream, or an httpx-like response
+    if isinstance(response, bytes):
+        return response
+    if hasattr(response, "content"):
+        return response.content
+    if hasattr(response, "read"):
+        return response.read()
+    if hasattr(response, "__iter__") and not isinstance(response, (str, bytes)):
+        return b"".join(response)
+    raise HTTPException(
+        status_code=status.HTTP_502_BAD_GATEWAY,
+        detail="Unexpected TTS response format from ElevenLabs.",
+    )
 

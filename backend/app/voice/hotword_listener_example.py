@@ -1,11 +1,11 @@
 """
-Minimal hotword listener sketch that shows how to
-hand off to the ElevenLabs voice session endpoint.
+Minimal hotword listener sketch: wake word triggers the voice flow.
 
-This intentionally leaves out low-level microphone wiring
-so you can plug in your preferred audio stack (PyAudio,
-sounddevice, etc.) while keeping the wake-word → session
-hand-off clear.
+Brain = Gemini + Backboard (POST /qa/{session_id} with the user's question).
+Speech = ElevenLabs TTS only (POST /api/voice/tts with response text).
+
+This example leaves out low-level microphone wiring so you can plug in
+your preferred audio stack (PyAudio, sounddevice, etc.).
 """
 
 import asyncio
@@ -17,9 +17,9 @@ import pvporcupine
 import sounddevice as sd
 
 
-VOICE_SESSION_URL = os.getenv(
-    "VOICE_SESSION_URL",
-    "http://localhost:8000/api/voice/session",
+VOICE_TTS_URL = os.getenv(
+    "VOICE_TTS_URL",
+    "http://localhost:8000/api/voice/tts",
 )
 INTERNAL_API_KEY = os.getenv("VOICE_AGENT_API_KEY", "dev-voice-agent-key")
 
@@ -62,36 +62,31 @@ def read_single_frame_from_microphone(
     return mono.astype("int16").tolist()
 
 
-async def trigger_voice_session() -> None:
+async def trigger_voice_flow() -> None:
     """
-    Call the FastAPI /voice/session endpoint to create a new
-    ElevenLabs conversational session.
+    Wake word detected. In a full flow you would:
+    1. Capture user speech and run STT (e.g. Whisper or client-side).
+    2. Send the question to Gemini + Backboard: POST /qa/{session_id} with body {"question": "..."}.
+    3. Send the answer text to TTS: POST /api/voice/tts with body {"text": answer}.
+    4. Play the returned MP3.
 
-    In a typical architecture, this runs on the same machine
-    as the hotword listener, and the response is forwarded to
-    the UI layer that owns the actual audio conversation loop.
+    This example just requests a short TTS clip to confirm the pipeline works.
     """
     async with httpx.AsyncClient() as client:
         resp = await client.post(
-            VOICE_SESSION_URL,
+            VOICE_TTS_URL,
             headers={"X-API-Key": INTERNAL_API_KEY},
-            timeout=10,
+            json={"text": "Ready. Ask your question about the document."},
+            timeout=15,
         )
         resp.raise_for_status()
-        data = resp.json()
-        print("Started ElevenLabs voice session:", data)
-
-        # At this point you would:
-        # - in a browser: use @elevenlabs/client with data["webrtc_token"]
-        #   and data["agent_id"] to start the WebRTC conversation.
-        # - in a native client: use the ElevenLabs Conversational AI SDK
-        #   for your platform to open the audio session.
+        # resp.content is MP3 bytes; play with your audio stack or forward to UI
+        print(f"TTS returned {len(resp.content)} bytes (audio/mpeg)")
 
 
 async def hotword_listener_loop() -> None:
     """
-    Idle loop that blocks until Porcupine detects the hotword,
-    then asks the backend to create a new ElevenLabs session.
+    Idle loop: on hotword, trigger the voice flow (Gemini+Backboard = brain, ElevenLabs = TTS).
     """
     access_key = os.environ["PICOVOICE_ACCESS_KEY"]
 
@@ -124,7 +119,7 @@ async def hotword_listener_loop() -> None:
 
             if keyword_index >= 0:
                 print(f"Hotword '{hotword_label}' detected.")
-                await trigger_voice_session()
+                await trigger_voice_flow()
     finally:
         porcupine.delete()
         # Clean up audio resources if we created a stream.

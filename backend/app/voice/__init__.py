@@ -1,2 +1,2 @@
-"""Voice / conversational AI integration (ElevenLabs, hotword, etc.)."""
+"""Voice: ElevenLabs TTS only; Gemini + Backboard is the conversation brain."""
 
