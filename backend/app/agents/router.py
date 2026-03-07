@@ -30,6 +30,7 @@ from app.agents.documents import (
     extract_pdf_with_pages,
 )
 from app.agents.extractor import run_extractor
+from app.agents.negotiate import run_negotiator
 from app.agents.summarizer import run_qa, run_summarizer
 from app.agents.validator import run_validator
 
@@ -197,6 +198,38 @@ def get_result(session_id: str):
     if session_id not in result_store:
         raise HTTPException(404, "No result yet. Run /analyze/{session_id} first.")
     return result_store[session_id]
+
+
+@router.get("/negotiate/{session_id}")
+async def negotiate(session_id: str):
+    """
+    Returns a full negotiation strategy for every HIGH and MEDIUM clause.
+    Each clause gets: rewritten version, negotiation script, priority,
+    leverage points, and a fallback position.
+
+    Call this after /analyze/{session_id} completes.
+    """
+    if session_id not in result_store:
+        raise HTTPException(404, "No analysis found. Run /analyze first.")
+
+    result = result_store[session_id]
+    thread_id = thread_store.get(session_id, "")
+
+    negotiations = await run_negotiator(
+        result["analyzed_clauses"],
+        result["document_name"],
+        result["document_type"],
+        thread_id,
+    )
+
+    return {
+        "session_id": session_id,
+        "document_name": result["document_name"],
+        "must_fight": [n for n in negotiations if n["priority"] == "MUST FIGHT"],
+        "should_push": [n for n in negotiations if n["priority"] == "SHOULD PUSH BACK"],
+        "accept_if_needed": [n for n in negotiations if n["priority"] == "ACCEPT IF NEEDED"],
+        "total": len(negotiations),
+    }
 
 
 class QARequest(BaseModel):
