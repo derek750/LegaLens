@@ -20,6 +20,9 @@ export default function Dashboard() {
     const [activeTab, setActiveTab] = useState('overview');
     const [viewingId, setViewingId] = useState(null);
     const [viewError, setViewError] = useState('');
+    const [viewerDoc, setViewerDoc] = useState(null);
+    const [viewerUrl, setViewerUrl] = useState('');
+    const [viewerLoading, setViewerLoading] = useState(false);
     const [consultantMessages, setConsultantMessages] = useState([]);
     const [consultantInput, setConsultantInput] = useState('');
     const [consultantSelectedDocId, setConsultantSelectedDocId] = useState('none');
@@ -51,17 +54,24 @@ export default function Dashboard() {
     const handleView = async (doc) => {
         setViewError('');
         setViewingId(doc.id);
+        setViewerLoading(true);
         try {
             const data = await getDocumentUrl(doc.bucket_path);
-            if (data.url) {
-                window.open(data.url, '_blank', 'noopener');
-            } else {
+            if (!data.url) {
                 setViewError('Could not generate a link for this document.');
+                setViewerDoc(null);
+                setViewerUrl('');
+                return;
             }
+
+            setViewerDoc(doc);
+            setViewerUrl(data.url);
+            setActiveTab('viewer');
         } catch (err) {
             setViewError(err.message || 'Failed to open document');
         } finally {
             setViewingId(null);
+            setViewerLoading(false);
         }
     };
 
@@ -199,6 +209,18 @@ export default function Dashboard() {
                             }`}
                         >
                             Overview
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => viewerDoc && setActiveTab('viewer')}
+                            disabled={!viewerDoc}
+                            className={`pb-2 border-b-2 transition-colors ${
+                                activeTab === 'viewer'
+                                    ? 'border-[#17282E] text-[#17282E]'
+                                    : 'border-transparent text-[#604B42]/50 hover:text-[#17282E]'
+                            } ${!viewerDoc ? 'opacity-40 cursor-not-allowed' : ''}`}
+                        >
+                            Viewer
                         </button>
                         <button
                             type="button"
@@ -342,6 +364,78 @@ export default function Dashboard() {
                             </div>
                         </div>
                     </>
+                )}
+
+                {/* Viewer tab – in‑app document preview placeholder */}
+                {activeTab === 'viewer' && (
+                    <div className="relative">
+                        <div className="absolute inset-0 translate-x-[4px] translate-y-[4px] bg-[#17282E]/25" />
+                        <div className="relative glass-panel border border-[#604B42]/25 p-8">
+                            {viewerDoc ? (
+                                <>
+                                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-6">
+                                        <div>
+                                            <h3 className="text-xl font-semibold text-[#17282E]">
+                                                {viewerDoc.filename}
+                                            </h3>
+                                            <p className="text-xs text-[#604B42] mt-1">
+                                                In‑app preview (placeholder). In the full version, this area will show your document with highlighted clauses.
+                                            </p>
+                                        </div>
+                                        <div className="text-xs text-right text-[#604B42] space-y-1">
+                                            <p>
+                                                Uploaded:{' '}
+                                                {viewerDoc.created_at
+                                                    ? new Date(viewerDoc.created_at).toLocaleString()
+                                                    : '—'}
+                                            </p>
+                                            <p>Size: {formatBytes(viewerDoc.size_bytes)}</p>
+                                        </div>
+                                    </div>
+
+                                    <div className="flex flex-col lg:flex-row gap-6">
+                                        <div className="flex-1 min-h-[420px] border border-[#604B42]/30 bg-white overflow-hidden">
+                                            {viewerUrl ? (
+                                                <iframe
+                                                    title={viewerDoc.filename}
+                                                    src={viewerUrl}
+                                                    className="w-full h-full"
+                                                />
+                                            ) : (
+                                                <div className="w-full h-full flex items-center justify-center text-sm text-[#604B42] px-6 text-center">
+                                                    Document preview will appear here once the backend returns an embeddable viewer URL.
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        <div className="w-full lg:w-72 border border-dashed border-[#604B42]/40 bg-[#F5F0EC]/80 px-4 py-3 text-xs text-[#604B42] space-y-2">
+                                            <p className="font-semibold text-[#17282E]">
+                                                Placeholder clause highlights
+                                            </p>
+                                            <p>
+                                                This side panel will later list risky or unusual clauses found
+                                                in the document, grouped by severity and category.
+                                            </p>
+                                            <ul className="list-disc list-inside space-y-1">
+                                                <li>Red: clearly predatory or one‑sided clauses</li>
+                                                <li>Amber: terms that deserve a closer look</li>
+                                                <li>Green: favorable protections worth keeping</li>
+                                            </ul>
+                                            <p className="text-[11px]">
+                                                For now, use this as a visual placeholder while you iterate on
+                                                the backend analysis pipeline.
+                                            </p>
+                                        </div>
+                                    </div>
+                                </>
+                            ) : (
+                                <div className="text-sm text-[#604B42]">
+                                    Choose <span className="font-semibold text-[#17282E]">View</span> on a document in the
+                                    <span className="font-semibold text-[#17282E]"> Overview</span> tab to open it here inside the app.
+                                </div>
+                            )}
+                        </div>
+                    </div>
                 )}
 
                 {/* Simulate tab (placeholder) */}
