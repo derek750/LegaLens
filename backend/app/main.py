@@ -25,3 +25,8 @@ app.include_router(router)
 def root():
     return {"message": "LegaLens API"}
 
+
+@app.get("/health")
+def health():
+    return {"status": "ok", "service": "LegaLens API"}
+

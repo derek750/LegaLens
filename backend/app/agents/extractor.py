@@ -1,24 +1,16 @@
 """
 LegalLens — Agent 1: The Extractor
-=====================================
-Responsibility: Read the raw document and identify every clause
-worth examining. Pure identification — no judgment, no scoring.
-
-Output: A structured list of Clause objects with type, raw text,
-and location. That's it. The Analyst handles everything else.
-
-Model: Gemini 2.5 Flash (long context window handles full contracts)
+Responsibility: Read the raw document and identify every clause worth examining.
 """
 
 import json
 import re
-import uuid
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import SystemMessage, HumanMessage
-from .state import AgentState, Clause
+
+from app.agents.state import AgentState, Clause
 
 
-# ── Clause types the extractor knows about ─────────────────────────────────
 CLAUSE_TYPES = [
     "Liability Waiver",
     "IP Assignment",
@@ -60,15 +52,6 @@ Rules:
 5. If you cannot identify the location precisely, use "Unknown location".
 
 Output ONLY a valid JSON array of clause objects. No preamble, no explanation, no markdown.
-Example output format:
-[
-  {{
-    "id": "clause_001",
-    "type": "Liability Waiver",
-    "raw_text": "The participant hereby waives all claims...",
-    "location": "Section 4, Paragraph 1"
-  }}
-]
 """
 
 EXTRACTOR_USER_PROMPT = """Here is the legal document to analyze:
@@ -87,15 +70,12 @@ Extract all legal clauses from this document and return them as a JSON array.
 def extractor_agent(state: AgentState) -> AgentState:
     """
     Agent 1: Extracts all clauses from the document.
-    
     Reads: document_text, document_name, document_type
     Writes: clauses
     """
-    print("🔍 [Extractor Agent] Starting clause extraction...")
-
     llm = ChatGoogleGenerativeAI(
         model="gemini-2.0-flash",
-        temperature=0.1,   # Low temp — we want consistent, deterministic extraction
+        temperature=0.1,
         max_tokens=8192,
     )
 
@@ -106,7 +86,7 @@ def extractor_agent(state: AgentState) -> AgentState:
     user_prompt = EXTRACTOR_USER_PROMPT.format(
         document_name=state["document_name"],
         document_type=state["document_type"],
-        document_text=state["document_text"][:50000],  # Cap at ~50k chars to stay in context window
+        document_text=state["document_text"][:50000],
     )
 
     try:
@@ -116,18 +96,13 @@ def extractor_agent(state: AgentState) -> AgentState:
         ])
 
         raw_output = response.content.strip()
-
-        # Strip markdown code fences if the model wrapped the JSON
         raw_output = re.sub(r"^```(?:json)?\s*", "", raw_output)
         raw_output = re.sub(r"\s*```$", "", raw_output)
 
         clauses_raw = json.loads(raw_output)
-
-        # Validate and cast to our Clause TypedDict
         clauses: list[Clause] = []
         for item in clauses_raw:
             if not all(k in item for k in ["id", "type", "raw_text", "location"]):
-                print(f"  ⚠️  Skipping malformed clause: {item}")
                 continue
             clauses.append(Clause(
                 id=item["id"],
@@ -136,7 +111,6 @@ def extractor_agent(state: AgentState) -> AgentState:
                 location=item["location"],
             ))
 
-        print(f"  ✅ Extracted {len(clauses)} clauses.")
         return {
             **state,
             "clauses": clauses,
@@ -146,7 +120,6 @@ def extractor_agent(state: AgentState) -> AgentState:
 
     except json.JSONDecodeError as e:
         error_msg = f"Extractor JSON parse error: {e}"
-        print(f"  ❌ {error_msg}")
         return {
             **state,
             "clauses": [],
@@ -155,7 +128,6 @@ def extractor_agent(state: AgentState) -> AgentState:
         }
     except Exception as e:
         error_msg = f"Extractor agent failed: {e}"
-        print(f"  ❌ {error_msg}")
         return {
             **state,
             "clauses": [],
