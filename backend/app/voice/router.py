@@ -4,6 +4,10 @@ from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Respo
 from pydantic import BaseModel
 
 from app.agents.backboard import backboard_create_thread
+from app.agents.documents import detect_document_type, extract_docx, extract_pdf
+from app.agents.extractor import run_extractor
+from app.agents.analyst import run_analyst
+from app.db.storage import download_file
 from app.voice.voice import (
     create_voice_session_internal,
     run_qa_remote,
@@ -151,3 +155,64 @@ async def voice_think(
         session_id=body.session_id,
     )
     return {"answer": answer}
+
+
+class ContextDocumentRequest(BaseModel):
+    """
+    Add a stored document as context into an existing Backboard thread.
+
+    The document is downloaded from storage, parsed, and passed through the
+    extractor + analyst agents, which both write into the SAME Backboard thread
+    used by the voice consultant. This gives the AI clause-level context for
+    that document without creating a new thread.
+    """
+
+    thread_id: str
+    bucket_path: str
+
+
+@router.post("/context/document")
+async def add_context_document_to_thread(
+    body: ContextDocumentRequest,
+    _: None = Depends(_verify_internal_api_key),
+):
+    """
+    Run extractor + analyst on a stored document and save results into an
+    existing Backboard thread (voice consultant memory).
+    """
+    thread_id = body.thread_id.strip()
+    if not thread_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="thread_id is required.",
+        )
+    try:
+        file_bytes = download_file(body.bucket_path)
+    except Exception as e:  # pragma: no cover - storage errors are rare and environment-specific
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to download context document: {e}",
+        ) from e
+
+    filename = body.bucket_path.rsplit("/", 1)[-1] or "document"
+    is_pdf = filename.lower().endswith(".pdf")
+    text = extract_pdf(file_bytes) if is_pdf else extract_docx(file_bytes)
+    if len(text) < 100:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Could not extract enough text from the context document.",
+        )
+
+    doc_type = detect_document_type(text)
+
+    # 1) Extract clauses into this existing Backboard thread
+    clauses = await run_extractor(text, filename, doc_type, thread_id)
+
+    # 2) Analyze clauses against Canadian law into the same thread
+    analyzed = await run_analyst(clauses, filename, doc_type, thread_id)
+
+    return {
+        "document_name": filename,
+        "document_type": doc_type,
+        "clause_count": len(analyzed),
+    }

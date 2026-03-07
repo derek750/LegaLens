@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 import { DocumentTextIcon, MagnifyingGlassIcon } from '@heroicons/react/24/outline';
 import { Conversation } from '@elevenlabs/client';
 import Layout from '../components/Layout';
-import { listDocuments, getDocumentUrl, analyzeStoredDocument, createVoiceSession, createBackboardThread, voiceThink } from '../api.ts';
+import { listDocuments, getDocumentUrl, analyzeStoredDocument, createVoiceSession, createBackboardThread, voiceThink, addContextDocumentToVoiceThread } from '../api.ts';
 
 function formatBytes(bytes) {
     if (!bytes) return '—';
@@ -45,19 +45,33 @@ export default function Dashboard() {
     const [consultantInput, setConsultantInput] = useState('');
     const [consultantSelectedDocId, setConsultantSelectedDocId] = useState('none');
     const [consultantSending, setConsultantSending] = useState(false);
+    const [consultantContextStatus, setConsultantContextStatus] = useState('');
     const [assistantSpeaking, setAssistantSpeaking] = useState(false);
     const [voiceStatus, setVoiceStatus] = useState('idle');
     const [voiceError, setVoiceError] = useState('');
-    const [hotwordListening, setHotwordListening] = useState(false);
+    const [hotwordListening, setHotwordListening] = useState(true);
     const voiceConversationRef = useRef(null);
     const voiceBackboardThreadIdRef = useRef(null);
     const hotwordRecognizerRef = useRef(null);
+    const addConsultantTurnRef = useRef(null);
 
     useEffect(() => {
         listDocuments()
             .then((data) => setDocuments(data.files || []))
             .catch((err) => setError(err.message))
             .finally(() => setLoading(false));
+    }, []);
+
+    useEffect(() => {
+        addConsultantTurnRef.current = (userText, assistantText) => {
+            const ts = new Date().toISOString();
+            setConsultantMessages((prev) => [
+                ...prev,
+                { id: `${ts}-user`, role: 'user', text: userText, createdAt: ts },
+                { id: `${ts}-asst`, role: 'assistant', text: assistantText, createdAt: ts },
+            ]);
+        };
+        return () => { addConsultantTurnRef.current = null; };
     }, []);
 
     useEffect(() => {
@@ -214,52 +228,60 @@ export default function Dashboard() {
         }
     };
 
-    const handleConsultantSend = (e) => {
+    const handleConsultantSend = async (e) => {
         e.preventDefault();
         const trimmed = consultantInput.trim();
         if (!trimmed) return;
 
-        const selectedDoc =
-            consultantSelectedDocId && consultantSelectedDocId !== 'none'
-                ? documents.find((d) => d.id === consultantSelectedDocId)
-                : null;
+        let threadId = voiceBackboardThreadIdRef.current;
+        if (!threadId) {
+            try {
+                const backboard = await createBackboardThread('LegaLens Voice Consultant');
+                threadId = backboard.thread_id;
+                voiceBackboardThreadIdRef.current = threadId;
+            } catch (err) {
+                setConsultantMessages((prev) => [
+                    ...prev,
+                    { id: `${Date.now()}-user`, role: 'user', text: trimmed, createdAt: new Date().toISOString() },
+                    { id: `${Date.now()}-err`, role: 'assistant', text: 'Could not start conversation. Please try again.', createdAt: new Date().toISOString() },
+                ]);
+                setConsultantInput('');
+                return;
+            }
+        }
 
         const timestamp = new Date().toISOString();
-
-        const userMessage = {
-            id: `${timestamp}-user`,
-            role: 'user',
-            text: trimmed,
-            docContext: selectedDoc
-                ? { id: selectedDoc.id, filename: selectedDoc.filename }
-                : null,
-            createdAt: timestamp,
-        };
-
+        const userMessage = { id: `${timestamp}-user`, role: 'user', text: trimmed, createdAt: timestamp };
         setConsultantMessages((prev) => [...prev, userMessage]);
         setConsultantInput('');
         setConsultantSending(true);
         setAssistantSpeaking(true);
 
-        setTimeout(() => {
-            const assistantText = selectedDoc
-                ? `Placeholder answer using "${selectedDoc.filename}" as context. In the full version, an AI legal assistant would read this document and explain clauses, risks, and negotiation angles.`
-                : 'Placeholder answer from your AI legal consultant. In the full version, this would contain a law-aware response tailored to your question.';
-
+        try {
+            const { answer } = await voiceThink({
+                thread_id: threadId,
+                user_utterance: trimmed,
+                session_id: null,
+            });
             const assistantMessage = {
                 id: `${Date.now()}-assistant`,
                 role: 'assistant',
-                text: assistantText,
-                docContext: selectedDoc
-                    ? { id: selectedDoc.id, filename: selectedDoc.filename }
-                    : null,
+                text: answer || 'I couldn’t get an answer for that.',
                 createdAt: new Date().toISOString(),
             };
-
             setConsultantMessages((prev) => [...prev, assistantMessage]);
+        } catch (err) {
+            const assistantMessage = {
+                id: `${Date.now()}-assistant`,
+                role: 'assistant',
+                text: err?.message || 'Something went wrong. Please try again.',
+                createdAt: new Date().toISOString(),
+            };
+            setConsultantMessages((prev) => [...prev, assistantMessage]);
+        } finally {
             setConsultantSending(false);
             setAssistantSpeaking(false);
-        }, 700);
+        }
     };
 
     const handleToggleVoice = async () => {
@@ -281,16 +303,20 @@ export default function Dashboard() {
             setVoiceError('');
             setVoiceStatus('connecting');
 
-            // Create Backboard thread first so the agent has memory; required for /think.
-            let backboard;
-            try {
-                backboard = await createBackboardThread('LegaLens Voice Consultant');
-            } catch (err) {
-                setVoiceError('Could not create conversation memory. Please try again.');
-                setVoiceStatus('idle');
-                return;
+            // Ensure we have a Backboard thread for this voice session; reuse if context was added earlier.
+            let threadId = voiceBackboardThreadIdRef.current;
+            if (!threadId) {
+                let backboard;
+                try {
+                    backboard = await createBackboardThread('LegaLens Voice Consultant');
+                } catch (err) {
+                    setVoiceError('Could not create conversation memory. Please try again.');
+                    setVoiceStatus('idle');
+                    return;
+                }
+                threadId = backboard.thread_id;
+                voiceBackboardThreadIdRef.current = threadId;
             }
-            voiceBackboardThreadIdRef.current = backboard.thread_id;
 
             const session = await createVoiceSession();
             const threadIdRef = voiceBackboardThreadIdRef;
@@ -316,8 +342,6 @@ export default function Dashboard() {
                 clientTools: {
                     get_legal_answer: async ({ query }) => {
                         const q = typeof query === 'string' ? query : String(query ?? '');
-                        // eslint-disable-next-line no-console
-                        console.log('[voice brain] get_legal_answer called', { query: q });
                         const threadId = threadIdRef.current;
                         if (!threadId) return 'No conversation thread. Please try again.';
                         try {
@@ -326,13 +350,13 @@ export default function Dashboard() {
                                 user_utterance: q,
                                 session_id: null,
                             });
-                            // eslint-disable-next-line no-console
-                            console.log('[voice brain] got answer', { length: answer?.length, preview: answer?.slice(0, 80) });
-                            return answer;
+                            const text = answer || 'I couldn’t get an answer for that.';
+                            addConsultantTurnRef.current?.(q, text);
+                            return text;
                         } catch (err) {
-                            // eslint-disable-next-line no-console
-                            console.error('Voice think error:', err);
-                            return err?.message || 'Sorry, I could not get an answer right now.';
+                            const fallback = err?.message || 'Sorry, I could not get an answer right now.';
+                            addConsultantTurnRef.current?.(q, fallback);
+                            return fallback;
                         }
                     },
                 },
@@ -663,27 +687,45 @@ export default function Dashboard() {
                             <h3 className="text-xl font-semibold text-[#17282E] mb-2">
                                 LegaLens consultant
                             </h3>
-                            <p className="text-sm text-[#604B42] mb-6 max-w-xl">
-                                Chat with a placeholder AI legal assistant. Ask about clauses and
-                                trade‑offs, or ground the conversation in one of your uploaded
-                                documents.
-                            </p>
 
                             <div className="flex flex-col md:flex-row gap-6 mb-6">
-                                <div className="flex-1 text-sm text-[#604B42]">
-                                    <p>
-                                        Text chat on this page is still a front‑end prototype. Messages stay
-                                        on this page only, but the voice mode uses a real ElevenLabs agent
-                                        configured on your backend.
-                                    </p>
-                                </div>
                                 <div className="w-full md:w-72">
                                     <label className="block text-xs font-semibold text-[#604B42] mb-1">
                                         Context document (optional)
                                     </label>
                                     <select
                                         value={consultantSelectedDocId}
-                                        onChange={(e) => setConsultantSelectedDocId(e.target.value)}
+                                        onChange={async (e) => {
+                                            const value = e.target.value;
+                                            setConsultantSelectedDocId(value);
+                                            setConsultantContextStatus('');
+                                            if (value === 'none') return;
+
+                                            const selectedDoc = documents.find((d) => d.id === value);
+                                            if (!selectedDoc || !selectedDoc.bucket_path) {
+                                                setConsultantContextStatus('Could not load context document.');
+                                                return;
+                                            }
+
+                                            let threadId = voiceBackboardThreadIdRef.current;
+                                            try {
+                                                if (!threadId) {
+                                                    const backboard = await createBackboardThread('LegaLens Voice Consultant');
+                                                    threadId = backboard.thread_id;
+                                                    voiceBackboardThreadIdRef.current = threadId;
+                                                }
+                                                setConsultantContextStatus('Adding document context for your AI consultant…');
+                                                await addContextDocumentToVoiceThread({
+                                                    thread_id: threadId,
+                                                    bucket_path: selectedDoc.bucket_path,
+                                                });
+                                                setConsultantContextStatus(`Context loaded from "${selectedDoc.filename}".`);
+                                            } catch (err) {
+                                                // eslint-disable-next-line no-console
+                                                console.error('Failed to add context document to voice thread', err);
+                                                setConsultantContextStatus(err?.message || 'Failed to add document context.');
+                                            }
+                                        }}
                                         className="pixel-input w-full px-3 py-2 bg-[#F5F0EC] text-sm text-[#17282E]"
                                     >
                                         <option value="none">No document – general legal question</option>
@@ -694,9 +736,14 @@ export default function Dashboard() {
                                         ))}
                                     </select>
                                     <p className="mt-1 text-[11px] text-[#604B42]/80">
-                                        In the full version, the consultant would read the selected file for
-                                        extra context.
+                                        When you pick a document, LegaLens runs clause extraction and analysis on it
+                                        inside the same Backboard memory thread used by the voice consultant.
                                     </p>
+                                    {consultantContextStatus && (
+                                        <p className="mt-1 text-[11px] text-[#604B42]">
+                                            {consultantContextStatus}
+                                        </p>
+                                    )}
                                 </div>
                             </div>
 
@@ -714,8 +761,7 @@ export default function Dashboard() {
                                         />
                                     </div>
                                     <p className="text-xs text-center text-[#604B42] max-w-xs">
-                                        Speak naturally to this lawyer using real voice via ElevenLabs, or
-                                        type your question into the chat on the right.
+                                        Use voice or type; all messages are saved in the chat.
                                     </p>
                                 </div>
 
@@ -723,21 +769,9 @@ export default function Dashboard() {
                                     <div className="border border-[#604B42]/30 bg-[#F5F0EC]/60 h-80 flex flex-col overflow-hidden">
                                         <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
                                             {consultantMessages.length === 0 && (
-                                                <div className="text-xs text-[#604B42] bg-white/70 border border-dashed border-[#604B42]/30 p-3">
-                                                    <p className="font-medium mb-1">Try asking:</p>
-                                                    <ul className="list-disc list-inside space-y-1">
-                                                        <li>
-                                                            &quot;Is there anything risky about the non‑compete in my latest
-                                                            employment agreement?&quot;
-                                                        </li>
-                                                        <li>
-                                                            &quot;What should I look out for in limitation‑of‑liability clauses?&quot;
-                                                        </li>
-                                                        <li>
-                                                            Select a document above, then ask how fair a specific clause is.
-                                                        </li>
-                                                    </ul>
-                                                </div>
+                                                <p className="text-xs text-[#604B42]/80 italic">
+                                                    Ask a question below or use voice. Your messages and the lawyer’s replies appear here.
+                                                </p>
                                             )}
 
                                             {consultantMessages.map((msg) => (
@@ -783,9 +817,7 @@ export default function Dashboard() {
                                         </button>
                                         <div className="flex-1 text-[11px] text-[#604B42]/90 space-y-1">
                                             <p>
-                                                Start a real‑time voice conversation powered by ElevenLabs while
-                                                the avatar animates as it speaks. When prompted, allow your
-                                                browser to access the microphone.
+                                                Voice and text both use the same AI; replies appear in the chat above.
                                             </p>
                                             <p className="text-[10px] flex items-center gap-3">
                                                 {(() => {
