@@ -50,44 +50,44 @@ export default function Dashboard() {
 
                 {/* Stats Overview */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-                    <div className="glass-panel p-6 rounded-2xl flex items-center gap-4 border border-white/60">
-                        <div className="w-3 h-3 rounded-full bg-blue-500" />
+                    <div className="glass-panel p-6 rounded-2xl flex items-center gap-4 border border-[#604B42]/25 bg-[#F5F0EC]">
+                        <div className="w-5 h-5 rounded-full bg-blue-500 ring-2 ring-[#604B42]/40" />
                         <div>
-                            <p className="text-sm font-medium text-gray-500">Total Scanned</p>
-                            <h4 className="text-2xl font-bold text-gray-900">{documents.length}</h4>
+                            <p className="text-sm font-medium text-[#604B42]">Total scanned</p>
+                            <h4 className="text-2xl font-semibold text-[#17282E]">{documents.length}</h4>
                         </div>
                     </div>
 
-                    <div className="glass-panel p-6 rounded-2xl flex items-center gap-4 border border-white/60">
-                        <div className="w-3 h-3 rounded-full bg-red-500" />
+                    <div className="glass-panel p-6 rounded-2xl flex items-center gap-4 border border-[#604B42]/25 bg-[#F5F0EC]">
+                        <div className="w-5 h-5 rounded-full bg-red-500 ring-2 ring-[#604B42]/40" />
                         <div>
-                            <p className="text-sm font-medium text-gray-500">Clauses Flagged</p>
-                            <h4 className="text-2xl font-bold text-gray-900">—</h4>
+                            <p className="text-sm font-medium text-[#604B42]">Clauses flagged</p>
+                            <h4 className="text-2xl font-semibold text-[#17282E]">—</h4>
                         </div>
                     </div>
 
-                    <div className="glass-panel p-6 rounded-2xl flex items-center gap-4 border border-white/60">
-                        <div className="w-3 h-3 rounded-full bg-green-500" />
+                    <div className="glass-panel p-6 rounded-2xl flex items-center gap-4 border border-[#604B42]/25 bg-[#F5F0EC]">
+                        <div className="w-5 h-5 rounded-full bg-green-500 ring-2 ring-[#604B42]/40" />
                         <div>
-                            <p className="text-sm font-medium text-gray-500">Clean Documents</p>
-                            <h4 className="text-2xl font-bold text-gray-900">—</h4>
+                            <p className="text-sm font-medium text-[#604B42]">Clean documents</p>
+                            <h4 className="text-2xl font-semibold text-[#17282E]">—</h4>
                         </div>
                     </div>
                 </div>
 
                 {/* Document List */}
-                <div className="glass-panel rounded-2xl overflow-hidden border border-white/60 shadow-sm">
+                <div className="glass-panel rounded-2xl overflow-hidden border border-[#604B42]/25 shadow-sm">
                     <div className="overflow-x-auto">
                         <table className="w-full text-left border-collapse">
                             <thead>
-                                <tr className="bg-slate-50/50 border-b border-slate-200 text-sm font-semibold text-slate-600">
-                                    <th className="py-4 px-6">Document Name</th>
-                                    <th className="py-4 px-6">Date Uploaded</th>
-                                    <th className="py-4 px-6">Size</th>
-                                    <th className="py-4 px-6 text-right">Status</th>
+                                <tr className="bg-[#F5F0EC] border-b border-[#604B42]/25 text-xs font-semibold text-[#604B42] uppercase tracking-wide">
+                                    <th className="py-3 px-6">Document</th>
+                                    <th className="py-3 px-6">Uploaded</th>
+                                    <th className="py-3 px-6">Size</th>
+                                    <th className="py-3 px-6 text-right">Status</th>
                                 </tr>
                             </thead>
-                            <tbody className="divide-y divide-slate-100">
+                            <tbody className="divide-y divide-[#F5F0EC]">
                                 {loading && (
                                     <tr><td colSpan="4" className="py-12 text-center text-slate-400">Loading…</td></tr>
                                 )}
@@ -103,24 +103,24 @@ export default function Dashboard() {
                                         initial={{ opacity: 0, y: 10 }}
                                         animate={{ opacity: 1, y: 0 }}
                                         transition={{ delay: index * 0.1 }}
-                                        className="hover:bg-slate-50/50 transition-colors group"
+                                        className="hover:bg-[#F5F0EC] transition-colors group"
                                     >
                                         <td className="py-4 px-6">
                                             <div className="flex items-center gap-3">
-                                                <DocumentTextIcon className="w-5 h-5 text-slate-400" />
-                                                <span className="font-medium text-slate-900 truncate max-w-xs block" title={doc.filename}>
+                                                <DocumentTextIcon className="w-5 h-5 text-[#604B42]/60" />
+                                                <span className="font-medium text-[#17282E] truncate max-w-xs block" title={doc.filename}>
                                                     {doc.filename}
                                                 </span>
                                             </div>
                                         </td>
-                                        <td className="py-4 px-6 text-slate-500 text-sm">
+                                        <td className="py-4 px-6 text-[#604B42] text-sm">
                                             {doc.created_at ? new Date(doc.created_at).toLocaleDateString() : '—'}
                                         </td>
-                                        <td className="py-4 px-6 text-slate-500 text-sm">
+                                        <td className="py-4 px-6 text-[#604B42] text-sm">
                                             {formatBytes(doc.size_bytes)}
                                         </td>
                                         <td className="py-4 px-6 text-right">
-                                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border bg-blue-50 text-blue-700 border-blue-200">
+                                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border bg-[#F5F0EC] text-[#17282E] border-[#604B42]/40">
                                                 Uploaded
                                             </span>
                                         </td>
@@ -130,8 +130,8 @@ export default function Dashboard() {
                         </table>
                     </div>
 
-                    <div className="p-4 border-t border-slate-100 bg-slate-50/30 text-center">
-                        <button className="text-sm font-medium text-slate-500 hover:text-slate-800 transition-colors">
+                    <div className="p-4 border-t border-[#604B42]/20 bg-[#F5F0EC] text-center">
+                        <button className="text-sm font-medium text-[#604B42] hover:text-[#17282E] transition-colors">
                             View All Documents
                         </button>
                     </div>
