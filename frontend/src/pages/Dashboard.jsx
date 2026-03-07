@@ -23,6 +23,7 @@ export default function Dashboard() {
     const [consultantInput, setConsultantInput] = useState('');
     const [consultantSelectedDocId, setConsultantSelectedDocId] = useState('none');
     const [consultantSending, setConsultantSending] = useState(false);
+    const [assistantSpeaking, setAssistantSpeaking] = useState(false);
 
     useEffect(() => {
         listDocuments()
@@ -77,6 +78,7 @@ export default function Dashboard() {
         setConsultantMessages((prev) => [...prev, userMessage]);
         setConsultantInput('');
         setConsultantSending(true);
+        setAssistantSpeaking(true);
 
         setTimeout(() => {
             const assistantText = selectedDoc
@@ -95,6 +97,7 @@ export default function Dashboard() {
 
             setConsultantMessages((prev) => [...prev, assistantMessage]);
             setConsultantSending(false);
+            setAssistantSpeaking(false);
         }, 700);
     };
 
@@ -330,71 +333,106 @@ export default function Dashboard() {
                             </div>
                         </div>
 
-                        <div className="flex flex-col gap-4">
-                            <div className="border border-[#604B42]/30 rounded-xl bg-[#F5F0EC]/60 h-80 flex flex-col overflow-hidden">
-                                <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
-                                    {consultantMessages.length === 0 && (
-                                        <div className="text-xs text-[#604B42] bg-white/70 border border-dashed border-[#604B42]/30 rounded-lg p-3">
-                                            <p className="font-medium mb-1">Try asking:</p>
-                                            <ul className="list-disc list-inside space-y-1">
-                                                <li>
-                                                    &quot;Is there anything risky about the non‑compete in my latest
-                                                    employment agreement?&quot;
-                                                </li>
-                                                <li>
-                                                    &quot;What should I look out for in limitation‑of‑liability clauses?&quot;
-                                                </li>
-                                                <li>
-                                                    Select a document above, then ask how fair a specific clause is.
-                                                </li>
-                                            </ul>
-                                        </div>
-                                    )}
-
-                                    {consultantMessages.map((msg) => (
-                                        <div
-                                            key={msg.id}
-                                            className={`flex ${
-                                                msg.role === 'user' ? 'justify-end' : 'justify-start'
-                                            }`}
-                                        >
-                                            <div
-                                                className={`max-w-[80%] rounded-2xl px-3 py-2 text-xs ${
-                                                    msg.role === 'user'
-                                                        ? 'bg-[#17282E] text-[#EBE6E3]'
-                                                        : 'bg-white text-[#17282E] border border-[#604B42]/25'
-                                                }`}
-                                            >
-                                                {msg.docContext && (
-                                                    <p className="text-[10px] mb-1 opacity-70">
-                                                        Context: {msg.docContext.filename}
-                                                    </p>
-                                                )}
-                                                <p>{msg.text}</p>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-
-                            <form onSubmit={handleConsultantSend} className="flex gap-3">
-                                <div className="flex-1">
-                                    <input
-                                        type="text"
-                                        value={consultantInput}
-                                        onChange={(e) => setConsultantInput(e.target.value)}
-                                        placeholder="Ask about a clause, law, or negotiation angle…"
-                                        className="w-full px-3 py-2 rounded-lg border border-[#604B42]/30 bg-[#F5F0EC] text-sm text-[#17282E] focus:outline-none focus:ring-2 focus:ring-[#17282E]/30"
+                        <div className="flex flex-col md:flex-row gap-6">
+                            <div className="w-full md:w-64 flex flex-col items-center gap-4">
+                                <div className="relative w-40 h-40 md:w-52 md:h-52 flex items-center justify-center">
+                                    <img
+                                        src={
+                                            assistantSpeaking
+                                                ? '/lawyer-talking.png'
+                                                : '/lawyer-neutral.png'
+                                        }
+                                        alt="AI legal consultant avatar"
+                                        className="w-full h-full object-contain pointer-events-none select-none"
                                     />
                                 </div>
-                                <button
-                                    type="submit"
-                                    disabled={consultantSending || !consultantInput.trim()}
-                                    className="px-4 py-2 rounded-full text-sm font-medium bg-[#17282E] text-[#EBE6E3] hover:bg-[#17282E] transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-                                >
-                                    {consultantSending ? 'Thinking…' : 'Send'}
-                                </button>
-                            </form>
+                                <p className="text-xs text-center text-[#604B42] max-w-xs">
+                                    Coming soon: speak naturally to this lawyer using real voice via
+                                    ElevenLabs, or type your question into the chat on the right.
+                                </p>
+                            </div>
+
+                            <div className="flex-1 flex flex-col gap-4">
+                                <div className="border border-[#604B42]/30 rounded-xl bg-[#F5F0EC]/60 h-80 flex flex-col overflow-hidden">
+                                    <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
+                                        {consultantMessages.length === 0 && (
+                                            <div className="text-xs text-[#604B42] bg-white/70 border border-dashed border-[#604B42]/30 rounded-lg p-3">
+                                                <p className="font-medium mb-1">Try asking:</p>
+                                                <ul className="list-disc list-inside space-y-1">
+                                                    <li>
+                                                        &quot;Is there anything risky about the non‑compete in my latest
+                                                        employment agreement?&quot;
+                                                    </li>
+                                                    <li>
+                                                        &quot;What should I look out for in limitation‑of‑liability clauses?&quot;
+                                                    </li>
+                                                    <li>
+                                                        Select a document above, then ask how fair a specific clause is.
+                                                    </li>
+                                                </ul>
+                                            </div>
+                                        )}
+
+                                        {consultantMessages.map((msg) => (
+                                            <div
+                                                key={msg.id}
+                                                className={`flex ${
+                                                    msg.role === 'user' ? 'justify-end' : 'justify-start'
+                                                }`}
+                                            >
+                                                <div
+                                                    className={`max-w-[80%] rounded-2xl px-3 py-2 text-xs ${
+                                                        msg.role === 'user'
+                                                            ? 'bg-[#17282E] text-[#EBE6E3]'
+                                                            : 'bg-white text-[#17282E] border border-[#604B42]/25'
+                                                    }`}
+                                                >
+                                                    {msg.docContext && (
+                                                        <p className="text-[10px] mb-1 opacity-70">
+                                                            Context: {msg.docContext.filename}
+                                                        </p>
+                                                    )}
+                                                    <p>{msg.text}</p>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                <div className="flex flex-col sm:flex-row gap-3 items-stretch">
+                                    <button
+                                        type="button"
+                                        disabled
+                                        className="sm:w-56 px-4 py-2 rounded-xl text-xs font-semibold bg-[#17282E] text-[#EBE6E3] shadow-sm border border-[#17282E]/60 opacity-70 cursor-not-allowed"
+                                    >
+                                        Talk to your lawyer (voice placeholder)
+                                    </button>
+                                    <p className="flex-1 text-[11px] text-[#604B42]/90">
+                                        In the full version, this button will start a real‑time voice
+                                        conversation powered by ElevenLabs while the avatar animates as
+                                        it speaks. For now, use the text box below.
+                                    </p>
+                                </div>
+
+                                <form onSubmit={handleConsultantSend} className="flex gap-3 mt-3">
+                                    <div className="flex-1">
+                                        <input
+                                            type="text"
+                                            value={consultantInput}
+                                            onChange={(e) => setConsultantInput(e.target.value)}
+                                            placeholder="Ask about a clause, law, or negotiation angle…"
+                                            className="w-full px-3 py-2 rounded-lg border border-[#604B42]/30 bg-[#F5F0EC] text-sm text-[#17282E] focus:outline-none focus:ring-2 focus:ring-[#17282E]/30"
+                                        />
+                                    </div>
+                                    <button
+                                        type="submit"
+                                        disabled={consultantSending || !consultantInput.trim()}
+                                        className="px-4 py-2 rounded-full text-sm font-medium bg-[#17282E] text-[#EBE6E3] hover:bg-[#17282E] transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                                    >
+                                        {consultantSending ? 'Thinking…' : 'Send'}
+                                    </button>
+                                </form>
+                            </div>
                         </div>
                     </div>
                 )}
