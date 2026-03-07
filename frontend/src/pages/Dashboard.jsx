@@ -12,6 +12,20 @@ function formatBytes(bytes) {
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+function getVoiceStatusVariant(status) {
+    const normalized = (status || 'idle').toLowerCase();
+    if (normalized === 'idle') {
+        return { label: 'idle', colorClass: 'bg-[#FACC6B]' }; // yellow square
+    }
+    if (normalized === 'connecting') {
+        return { label: 'connecting', colorClass: 'bg-[#C7D9FF]' }; // blue square
+    }
+    if (normalized === 'error') {
+        return { label: 'error', colorClass: 'bg-[#F8C7C8]' }; // red/pink square
+    }
+    return { label: normalized, colorClass: 'bg-[#C9E8D7]' }; // green square for active/other
+}
+
 export default function Dashboard() {
     const [documents, setDocuments] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -675,9 +689,22 @@ export default function Dashboard() {
                                                 the avatar animates as it speaks. When prompted, allow your
                                                 browser to access the microphone.
                                             </p>
-                                            <p className="text-[10px]">
-                                                Status: {voiceStatus === 'idle' ? 'idle' : voiceStatus}
-                                                {assistantSpeaking ? ' · speaking' : ''}
+                                            <p className="text-[10px] flex items-center gap-3">
+                                                {(() => {
+                                                    const { label, colorClass } = getVoiceStatusVariant(voiceStatus);
+                                                    return (
+                                                        <span className="inline-flex items-center gap-1.5">
+                                                            <span className={`w-3 h-3 ${colorClass} ring-2 ring-[#604B42]/30`} />
+                                                            <span>Status: {label}</span>
+                                                        </span>
+                                                    );
+                                                })()}
+                                                {assistantSpeaking && (
+                                                    <span className="inline-flex items-center gap-1.5">
+                                                        <span className="w-3 h-3 bg-[#C7D9FF] ring-2 ring-[#604B42]/30" />
+                                                        <span>speaking</span>
+                                                    </span>
+                                                )}
                                             </p>
                                             {voiceError && (
                                                 <p className="text-[10px] text-red-600">
