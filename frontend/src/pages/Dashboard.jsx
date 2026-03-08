@@ -249,7 +249,7 @@ export default function Dashboard() {
         }
     };
 
-    const handleConsultantSend = (e) => {
+    const handleConsultantSend = async (e) => {
         e.preventDefault();
         const trimmed = consultantInput.trim();
         if (!trimmed) return;
