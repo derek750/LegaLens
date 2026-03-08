@@ -78,7 +78,7 @@ async function computePageHighlights(page, clauses, scale) {
         charItem.push(-1); fullText += ' ';
     }
     const { norm, map: n2o } = buildNormMap(fullText);
-    const relevant = clauses.filter(c => c.raw_text && (c.severity === 'HIGH' || c.severity === 'MEDIUM'));
+    const relevant = clauses.filter(c => c.raw_text && (c.severity === 'HIGH' || c.severity === 'MEDIUM' || c.severity === 'UNKNOWN'));
     const rects = [];
 
     for (const clause of relevant) {
@@ -135,7 +135,7 @@ function HighlightedPage({ pageNumber, width, clauses, pdfDoc }) {
                     {rects.map((r, i) => (
                         <div key={i} style={{
                             position: 'absolute', left: r.left, top: r.top, width: r.width, height: r.height,
-                            backgroundColor: r.severity === 'HIGH' ? 'rgba(239,68,68,0.28)' : 'rgba(250,204,21,0.38)',
+                            backgroundColor: r.severity === 'HIGH' ? 'rgba(239,68,68,0.28)' : r.severity === 'MEDIUM' ? 'rgba(250,204,21,0.38)' : 'rgba(156,163,175,0.30)',
                             borderRadius: 2, mixBlendMode: 'multiply',
                         }} />
                     ))}

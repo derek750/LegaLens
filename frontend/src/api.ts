@@ -174,6 +174,36 @@ export async function analyzeStoredDocument(
   return result;
 }
 
+export type NegotiatedClause = {
+  id: string;
+  type: string;
+  severity: "HIGH" | "MEDIUM";
+  original_text: string;
+  rewritten_clause: string;
+  negotiation_script: string;
+  priority: "MUST FIGHT" | "SHOULD PUSH BACK" | "ACCEPT IF NEEDED";
+  leverage: string;
+  fallback_position: string;
+};
+
+export type NegotiationResult = {
+  session_id: string;
+  document_name: string;
+  must_fight: NegotiatedClause[];
+  should_push: NegotiatedClause[];
+  accept_if_needed: NegotiatedClause[];
+  total: number;
+};
+
+export async function negotiateDocument(
+  sessionId: string
+): Promise<NegotiationResult> {
+  const res = await apiFetch(`/agents/negotiate/${sessionId}`);
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.detail || "Negotiation failed");
+  return data as NegotiationResult;
+}
+
 type VoiceSessionResponse = {
   agent_id: string;
   webrtc_token: string;
