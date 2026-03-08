@@ -12,7 +12,7 @@ from app.db.storage import (
     get_document_by_path_cached,
     download_file,
 )
-from app.db.analyses import get_analysis_by_document_id_cached, result_from_analysis_row
+from app.db.analyses import get_analysis_by_document_id_cached, get_document_stats, result_from_analysis_row
 from app.auth.dependencies import get_current_user
 from app.services.pdf_parser import extract_text_from_pdf
 from app.agents.router import (
@@ -42,6 +42,14 @@ async def upload_document(file: UploadFile, user: dict = Depends(get_current_use
 async def list_documents(user: dict = Depends(get_current_user)):
     files = list_files_cached(user["user_id"])
     return {"files": files}
+
+
+@router.get("/stats")
+async def document_stats(user: dict = Depends(get_current_user)):
+    """Return aggregate stats: total scanned, clauses flagged, clean documents."""
+    files = list_files_cached(user["user_id"])
+    doc_ids = [f["id"] for f in files if f.get("id")]
+    return get_document_stats(doc_ids)
 
 
 @router.get("/url")

@@ -14,7 +14,7 @@ function formatBytes(bytes) {
 
 export default function Documents() {
     const navigate = useNavigate();
-    const { documents, docsLoading, docsError, viewingId, viewError, handleView } = useApp();
+    const { documents, docsLoading, docsError, docStats, viewingId, viewError, handleView } = useApp();
     const [search, setSearch] = useState('');
 
     const filtered = documents.filter((doc) =>
@@ -48,7 +48,7 @@ export default function Documents() {
                             <div className="w-6 h-6 bg-[#C7D9FF] ring-2 ring-[#604B42]/30" />
                             <div>
                                 <p className="text-sm font-medium text-[#604B42]">Total scanned</p>
-                                <h4 className="text-2xl font-semibold text-[#17282E]">{documents.length}</h4>
+                                <h4 className="text-2xl font-semibold text-[#17282E]">{docStats.total_scanned}</h4>
                             </div>
                         </div>
                     </div>
@@ -58,7 +58,7 @@ export default function Documents() {
                             <div className="w-6 h-6 bg-[#F8C7C8] ring-2 ring-[#604B42]/30" />
                             <div>
                                 <p className="text-sm font-medium text-[#604B42]">Clauses flagged</p>
-                                <h4 className="text-2xl font-semibold text-[#17282E]">{'\u2014'}</h4>
+                                <h4 className="text-2xl font-semibold text-[#17282E]">{docStats.clauses_flagged}</h4>
                             </div>
                         </div>
                     </div>
@@ -68,7 +68,7 @@ export default function Documents() {
                             <div className="w-6 h-6 bg-[#C9E8D7] ring-2 ring-[#604B42]/30" />
                             <div>
                                 <p className="text-sm font-medium text-[#604B42]">Clean documents</p>
-                                <h4 className="text-2xl font-semibold text-[#17282E]">{'\u2014'}</h4>
+                                <h4 className="text-2xl font-semibold text-[#17282E]">{docStats.clean_documents}</h4>
                             </div>
                         </div>
                     </div>

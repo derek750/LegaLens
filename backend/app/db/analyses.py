@@ -59,6 +59,39 @@ def get_analysis_by_document_id_cached(document_id: str) -> dict | None:
     )
 
 
+def get_document_stats(document_ids: list[str]) -> dict:
+    """Compute aggregate stats across all analyzed documents for a user."""
+    if not document_ids:
+        return {"total_scanned": 0, "clauses_flagged": 0, "clean_documents": 0}
+
+    r = (
+        supabase.table(TABLE)
+        .select("document_id, analyzed_clauses")
+        .in_("document_id", document_ids)
+        .execute()
+    )
+    rows = r.data or []
+
+    flagged_severities = {"HIGH", "MEDIUM", "UNKNOWN"}
+    total_flagged = 0
+    clean_count = 0
+
+    analyzed_doc_ids = set()
+    for row in rows:
+        analyzed_doc_ids.add(row["document_id"])
+        clauses = row.get("analyzed_clauses") or []
+        doc_flagged = sum(1 for c in clauses if c.get("severity") in flagged_severities)
+        total_flagged += doc_flagged
+        if doc_flagged == 0:
+            clean_count += 1
+
+    return {
+        "total_scanned": len(document_ids),
+        "clauses_flagged": total_flagged,
+        "clean_documents": clean_count,
+    }
+
+
 def result_from_analysis_row(row: dict) -> dict:
     """Convert a document_analyses row to the pipeline result shape (session_id set by caller)."""
     return {

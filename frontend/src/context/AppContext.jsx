@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useRef, useEffect, useCallback } from 'react';
 import { useAuth0 } from '@auth0/auth0-react';
-import { listDocuments, getDocumentUrl, analyzeStoredDocument, negotiateDocument } from '../api.ts';
+import { listDocuments, getDocumentStats, getDocumentUrl, analyzeStoredDocument, negotiateDocument } from '../api.ts';
 
 const AppContext = createContext(null);
 
@@ -10,6 +10,7 @@ export function AppProvider({ children }) {
     const [documents, setDocuments] = useState([]);
     const [docsLoading, setDocsLoading] = useState(false);
     const [docsError, setDocsError] = useState('');
+    const [docStats, setDocStats] = useState({ total_scanned: 0, clauses_flagged: 0, clean_documents: 0 });
 
     const [viewerDoc, setViewerDoc] = useState(null);
     const [viewerUrl, setViewerUrl] = useState('');
@@ -42,8 +43,11 @@ export function AppProvider({ children }) {
     const refreshDocuments = useCallback(() => {
         if (!isAuthenticated) return;
         setDocsLoading(true);
-        listDocuments()
-            .then((data) => setDocuments(data.files || []))
+        Promise.all([listDocuments(), getDocumentStats()])
+            .then(([docsData, statsData]) => {
+                setDocuments(docsData.files || []);
+                setDocStats(statsData);
+            })
             .catch((err) => setDocsError(err.message))
             .finally(() => setDocsLoading(false));
     }, [isAuthenticated]);
@@ -145,7 +149,7 @@ export function AppProvider({ children }) {
 
     return (
         <AppContext.Provider value={{
-            documents, docsLoading, docsError, refreshDocuments,
+            documents, docsLoading, docsError, docStats, refreshDocuments,
             viewerDoc, viewerUrl, viewingId, viewError,
             analysisLoading, analysisProgress, analysisResult, analysisError,
             negotiationResult, negotiationLoading, negotiationError,

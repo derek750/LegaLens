@@ -50,6 +50,19 @@ export async function listDocuments() {
   return data;
 }
 
+export type DocumentStats = {
+  total_scanned: number;
+  clauses_flagged: number;
+  clean_documents: number;
+};
+
+export async function getDocumentStats(): Promise<DocumentStats> {
+  const res = await apiFetch("/documents/stats");
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.detail || "Failed to fetch document stats");
+  return data as DocumentStats;
+}
+
 export async function getDocumentUrl(path: string) {
   const res = await apiFetch(`/documents/url?path=${encodeURIComponent(path)}`);
   const data = await res.json();
