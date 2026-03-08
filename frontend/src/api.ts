@@ -88,7 +88,7 @@ export type AnalyzedClause = {
   type: string;
   raw_text: string;
   location: string;
-  severity: "LOW" | "MEDIUM" | "HIGH";
+  severity: "LOW" | "HIGH";
   severity_reason?: string;
   plain_english?: string;
   canadian_law?: string;
@@ -191,7 +191,7 @@ export async function analyzeStoredDocument(
 export type NegotiatedClause = {
   id: string;
   type: string;
-  severity: "HIGH" | "MEDIUM";
+  severity: "HIGH";
   original_text: string;
   rewritten_clause: string;
   negotiation_script: string;

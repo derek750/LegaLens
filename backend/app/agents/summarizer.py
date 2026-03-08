@@ -12,7 +12,7 @@ Canadian law context (use for executive summary and risk wording):
 {canadian_law}
 
 Document: "{document_name}" ({document_type})
-Clauses: {total} total — HIGH: {high}, MEDIUM: {med}, LOW: {low}
+Clauses: {total} total — HIGH: {high}, LOW: {low}
 
 Analyzed clauses:
 {clauses_json}
@@ -25,7 +25,7 @@ Output a JSON object with EXACTLY these fields:
 - "bottom_line": one sentence verdict starting with one of:
   "Sign with caution —" / "Do not sign without a lawyer —" /
   "This is a fairly standard Canadian contract —" / "Seek legal advice before signing —"
-- "overall_risk_score": "LOW", "MEDIUM", "HIGH", or "CRITICAL"
+- "overall_risk_score": "LOW", "HIGH", or "CRITICAL"
 
 Be direct. Reference Canadian law where relevant. Raw JSON only."""
 
@@ -55,7 +55,6 @@ async def run_summarizer(
 ) -> Dict[str, Any]:
     print("Agent 3 (Summarizer): Writing summary...")
     high = sum(1 for c in analyzed_clauses if c.get("severity") == "HIGH")
-    med = sum(1 for c in analyzed_clauses if c.get("severity") == "MEDIUM")
     low = sum(1 for c in analyzed_clauses if c.get("severity") == "LOW")
 
     if not analyzed_clauses:
@@ -63,7 +62,7 @@ async def run_summarizer(
             "executive_summary": "No clauses could be extracted from this document.",
             "top_risks": ["Unable to analyze — no clauses found."],
             "bottom_line": "Sign with caution — document could not be fully analyzed.",
-            "overall_risk_score": "MEDIUM",
+            "overall_risk_score": "HIGH",
         }
 
     canadian_law = await backboard_get_global_law_context(thread_id)
@@ -73,7 +72,6 @@ async def run_summarizer(
         document_type=document_type,
         total=len(analyzed_clauses),
         high=high,
-        med=med,
         low=low,
         clauses_json=json.dumps(analyzed_clauses, indent=2)[:20000],
     )
@@ -95,7 +93,7 @@ async def run_summarizer(
             ]
             or ["Review clauses manually."],
             "bottom_line": "Sign with caution — automated summary failed.",
-            "overall_risk_score": "HIGH" if high > 0 else "MEDIUM",
+            "overall_risk_score": "HIGH" if high > 0 else "LOW",
         }
 
 

@@ -144,7 +144,7 @@ export function AppProvider({ children }) {
     }, [analysisResult]);
 
     const hasBadClauses = analysisResult?.analyzed_clauses?.some(
-        (c) => c.severity === 'HIGH' || c.severity === 'MEDIUM' || c.severity === 'UNKNOWN'
+        (c) => c.severity === 'HIGH'
     );
 
     return (

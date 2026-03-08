@@ -211,7 +211,7 @@ def get_result(session_id: str):
 @router.get("/negotiate/{session_id}")
 async def negotiate(session_id: str):
     """
-    Returns a full negotiation strategy for every HIGH and MEDIUM clause.
+    Returns a full negotiation strategy for every HIGH severity clause.
     Each clause gets: rewritten version, negotiation script, priority,
     leverage points, and a fallback position.
 

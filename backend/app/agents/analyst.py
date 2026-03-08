@@ -23,10 +23,14 @@ Use the Canadian law reference provided to inform your analysis.
 
 For EVERY clause return a JSON object with ALL these fields:
 - "id", "type", "raw_text", "location" — copy exactly from input
-- "severity": "LOW", "MEDIUM", or "HIGH"
-    HIGH = significant risk or likely unenforceable / violates Canadian law
-    MEDIUM = unusual, more restrictive than Canadian standard, worth negotiating
-    LOW = normal, standard clause in Canadian contracts
+- "severity": strictly "HIGH" or "LOW" — nothing else:
+    HIGH = any clause that is risky, one-sided, unusual, potentially unenforceable,
+          violates or pushes the boundaries of Canadian law, shifts unreasonable burden
+          to the signer, contains predatory language, imposes above-average penalties or
+          fees, has aggressive timelines, or that a reasonable person should push back on
+          before signing. When in doubt between HIGH and LOW, choose HIGH.
+    LOW = standard, balanced, fair, and widely typical for Canadian {document_type} contracts.
+          Only mark LOW if the clause is genuinely routine and poses no notable concern.
 - "severity_reason": 1-2 plain-English sentences explaining the score
 - "plain_english": what this clause actually means for the person signing (no jargon)
 - "canadian_law": which Canadian law or legal principle applies to this clause
@@ -166,7 +170,7 @@ _HIGH_KEYWORDS = [
     "structural issues", "regardless of property condition",
 ]
 
-_MEDIUM_KEYWORDS = [
+_HIGH_EXTRA_KEYWORDS = [
     "automatic renewal", "automatically renews", "180 days",
     "mandatory fee", "mandatory cleaning", "may increase rent",
     "at any time", "24 hours", "penalty", "liquidated damages",
@@ -180,9 +184,9 @@ def _heuristic_severity(raw_text: str) -> str:
     for kw in _HIGH_KEYWORDS:
         if kw in lower:
             return "HIGH"
-    for kw in _MEDIUM_KEYWORDS:
+    for kw in _HIGH_EXTRA_KEYWORDS:
         if kw in lower:
-            return "MEDIUM"
+            return "HIGH"
     return "LOW"
 
 
@@ -221,8 +225,7 @@ def _heuristic_fallback(clause: Dict[str, Any]) -> Dict[str, Any]:
     """Build a best-effort analysis entry using keyword heuristics."""
     sev = _heuristic_severity(clause.get("raw_text", ""))
     reason_map = {
-        "HIGH": "Flagged by keyword analysis — contains language commonly found in predatory clauses.",
-        "MEDIUM": "Flagged by keyword analysis — contains unusual or restrictive language.",
+        "HIGH": "Flagged by keyword analysis — contains language commonly found in predatory or one-sided clauses.",
         "LOW": "Standard clause — no concerning language detected by keyword analysis.",
     }
     return {
@@ -286,13 +289,12 @@ async def run_analyst(
             all_analyzed.append(_heuristic_fallback(clause))
 
     all_analyzed.sort(
-        key=lambda c: {"HIGH": 0, "MEDIUM": 1, "LOW": 2}.get(c.get("severity", ""), 3)
+        key=lambda c: {"HIGH": 0, "LOW": 1}.get(c.get("severity", ""), 2)
     )
 
     high = sum(1 for c in all_analyzed if c["severity"] == "HIGH")
-    med = sum(1 for c in all_analyzed if c["severity"] == "MEDIUM")
     low = sum(1 for c in all_analyzed if c["severity"] == "LOW")
-    print(f"  -> HIGH: {high}  MEDIUM: {med}  LOW: {low}")
+    print(f"  -> HIGH: {high}  LOW: {low}")
 
     await backboard_save(
         thread_id,

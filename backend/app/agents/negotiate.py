@@ -1,6 +1,6 @@
 # ═══════════════════════════════════════════════════════════════════════════════
 # AGENT 4 — NEGOTIATOR
-# Looks at every HIGH and MEDIUM clause from the Analyst's output and produces:
+# Looks at every HIGH clause from the Analyst's output and produces:
 # 1. A rewritten version of the clause that's fair and reasonable
 # 2. A negotiation script — what to actually say to the other party
 # 3. A ranked list of what to fight for vs what to let go
@@ -29,7 +29,7 @@ def negotiator_llm():
 NEGOTIATOR_PROMPT = """You are an expert Canadian contract negotiator. You help everyday
 people push back on unfair contract clauses in plain, confident language.
 
-You will receive a list of HIGH and MEDIUM severity clauses from a {document_type}
+You will receive a list of HIGH severity clauses from a {document_type}
 called "{document_name}". For each clause, produce a negotiation package.
 
 Output ONLY a valid JSON array. Each object must have ALL these fields:
@@ -45,9 +45,9 @@ Output ONLY a valid JSON array. Each object must have ALL these fields:
   done on my own time. I'd like to limit this to work done using company resources
   during work hours. This is standard practice and I'm happy to provide examples."
 - "priority": "MUST FIGHT", "SHOULD PUSH BACK", or "ACCEPT IF NEEDED"
-  MUST FIGHT = clause is severely one-sided or potentially unenforceable in Canada
-  SHOULD PUSH BACK = unusual but negotiable
-  ACCEPT IF NEEDED = not ideal but common in Canadian contracts
+  MUST FIGHT = clause is severely one-sided, potentially unenforceable, or violates Canadian law
+  SHOULD PUSH BACK = clause is unfavorable and worth negotiating but not a dealbreaker
+  ACCEPT IF NEEDED = clause is below standard but you can live with it if they won't budge
 - "leverage": one sentence on what leverage the signer has e.g. "This clause is
   routinely struck down by Canadian courts — mentioning this gives you strong leverage."
 - "fallback_position": if they won't budge on the full rewrite, what's the minimum
@@ -67,19 +67,16 @@ async def run_negotiator(
 ) -> list[dict]:
     print("Agent 4 (Negotiator): Building negotiation strategy...")
 
-    # Only negotiate HIGH and MEDIUM clauses — no point negotiating LOW risk ones
     clauses_to_negotiate = [
         c for c in analyzed_clauses
-        if c.get("severity") in ("HIGH", "MEDIUM")
+        if c.get("severity") == "HIGH"
     ]
 
     if not clauses_to_negotiate:
-        print("  -> No HIGH/MEDIUM clauses to negotiate.")
+        print("  -> No HIGH clauses to negotiate.")
         return []
 
-    print(f"  -> Negotiating {len(clauses_to_negotiate)} clauses "
-          f"({sum(1 for c in clauses_to_negotiate if c['severity']=='HIGH')} HIGH, "
-          f"{sum(1 for c in clauses_to_negotiate if c['severity']=='MEDIUM')} MEDIUM)")
+    print(f"  -> Negotiating {len(clauses_to_negotiate)} HIGH clauses")
 
     all_negotiations = []
     BATCH = 4  # smaller batch — negotiation output is verbose

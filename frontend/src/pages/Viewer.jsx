@@ -62,11 +62,9 @@ export default function Viewer() {
                                     {viewerDoc.filename}
                                 </h3>
                                 <p className="text-xs text-[#604B42] mt-1">
-                                    Predatory clauses are{' '}
+                                    Risky clauses are{' '}
                                     <span className="inline-block w-3 h-2 rounded-sm align-middle" style={{ backgroundColor: 'rgba(239,68,68,0.35)' }} />{' '}
-                                    highlighted in red, risky clauses in{' '}
-                                    <span className="inline-block w-3 h-2 rounded-sm align-middle" style={{ backgroundColor: 'rgba(250,204,21,0.45)' }} />{' '}
-                                    yellow.
+                                    highlighted in red.
                                 </p>
                             </div>
                             <div className="flex items-center gap-4">
@@ -133,40 +131,26 @@ export default function Viewer() {
                                             <span className={
                                                 analysisResult.overall_risk_score === 'HIGH' || analysisResult.overall_risk_score === 'CRITICAL'
                                                     ? 'text-red-600 font-semibold'
-                                                    : analysisResult.overall_risk_score === 'MEDIUM'
-                                                        ? 'text-amber-600 font-semibold'
-                                                        : 'text-[#604B42]'
+                                                    : 'text-[#604B42]'
                                             }>
                                                 {analysisResult.overall_risk_score}
                                             </span>
                                             {' \u00b7 '}{analysisResult.clause_count} clauses
                                         </p>
 
-                                        {analysisResult.analyzed_clauses?.filter(c => c.severity === 'HIGH' || c.severity === 'MEDIUM' || c.severity === 'UNKNOWN').length > 0 && (
+                                        {analysisResult.analyzed_clauses?.filter(c => c.severity === 'HIGH').length > 0 && (
                                             <div className="border-t border-[#604B42]/20 pt-3">
                                                 <p className="font-semibold text-[#17282E] mb-2">Flagged clauses</p>
                                                 <div className="space-y-2">
                                                     {analysisResult.analyzed_clauses
-                                                        .filter(c => c.severity === 'HIGH' || c.severity === 'MEDIUM' || c.severity === 'UNKNOWN')
+                                                        .filter(c => c.severity === 'HIGH')
                                                         .map(clause => (
-                                                            <div key={clause.id} className={`p-2 border rounded ${
-                                                                clause.severity === 'HIGH' ? 'border-red-300 bg-red-50'
-                                                                : clause.severity === 'MEDIUM' ? 'border-yellow-300 bg-yellow-50'
-                                                                : 'border-gray-300 bg-gray-50'
-                                                            }`}>
+                                                            <div key={clause.id} className="p-2 border rounded border-red-300 bg-red-50">
                                                                 <div className="flex items-center gap-1.5 mb-1">
-                                                                    <span className={`inline-block w-2 h-2 rounded-full ${
-                                                                        clause.severity === 'HIGH' ? 'bg-red-500'
-                                                                        : clause.severity === 'MEDIUM' ? 'bg-yellow-400'
-                                                                        : 'bg-gray-400'
-                                                                    }`} />
+                                                                    <span className="inline-block w-2 h-2 rounded-full bg-red-500" />
                                                                     <span className="font-semibold text-[#17282E]">{clause.type}</span>
-                                                                    <span className={`ml-auto text-[10px] font-bold ${
-                                                                        clause.severity === 'HIGH' ? 'text-red-600'
-                                                                        : clause.severity === 'MEDIUM' ? 'text-amber-600'
-                                                                        : 'text-gray-500'
-                                                                    }`}>
-                                                                        {clause.severity === 'UNKNOWN' ? 'NEEDS REVIEW' : clause.severity}
+                                                                    <span className="ml-auto text-[10px] font-bold text-red-600">
+                                                                        {clause.severity}
                                                                         {clause.page_start ? ` \u00b7 p.${clause.page_start}` : ''}
                                                                     </span>
                                                                 </div>

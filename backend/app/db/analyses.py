@@ -72,7 +72,7 @@ def get_document_stats(document_ids: list[str]) -> dict:
     )
     rows = r.data or []
 
-    flagged_severities = {"HIGH", "MEDIUM", "UNKNOWN"}
+    flagged_severities = {"HIGH"}
     total_flagged = 0
     clean_count = 0
 
