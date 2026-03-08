@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/logo.png" alt="LegaLens logo" width="280" />
+  <img src="frontend/public/logo.png" alt="LegaLens logo" width="280" />
 </p>
 
 <h1 align="center">LegaLens</h1>
