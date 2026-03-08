@@ -64,5 +64,6 @@ PyPDF2==3.0.1
 python-docx==1.1.2
 faiss-cpu==1.13.2
 elevenlabs
+numpy
 pvporcupine
 sounddevice

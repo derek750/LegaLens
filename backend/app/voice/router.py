@@ -1,19 +1,20 @@
 import os
-from typing import Optional
 
-from fastapi import APIRouter, Depends, Header, HTTPException, status
+from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Response, UploadFile, status
 from pydantic import BaseModel
 
-from app.voice.voice import create_voice_session_internal
-from app.agents.backboard import (
-    backboard_create_thread,
-    backboard_save,
-    backboard_get_history,
+from app.agents.backboard import backboard_create_thread
+from app.agents.documents import detect_document_type, extract_docx, extract_pdf
+from app.agents.extractor import run_extractor
+from app.agents.analyst import run_analyst
+from app.db.storage import download_file
+from app.voice.voice import (
+    create_voice_session_internal,
+    run_qa_remote,
+    run_voice_think,
+    speech_to_text_internal,
+    text_to_speech_internal,
 )
-from app.agents.summarizer import run_qa
-from app.agents.llm import summarizer_llm, call_llm
-from app.agents.router import vector_store, result_store
-
 
 router = APIRouter(prefix="/voice", tags=["voice"])
 
@@ -23,8 +24,7 @@ async def _verify_internal_api_key(
 ) -> None:
     """
     Lightweight guard so only trusted clients (e.g. your own frontend
-    or hotword listener process) can start a voice session or call
-    Backboard tools exposed for ElevenLabs thinking.
+    or hotword listener) can use voice endpoints.
     """
     expected = os.getenv("VOICE_AGENT_API_KEY", "dev-voice-agent-key")
     if x_api_key != expected:
@@ -34,194 +34,193 @@ async def _verify_internal_api_key(
         )
 
 
+class TTSRequest(BaseModel):
+    """Request body for text-to-speech. ElevenLabs is TTS only; Gemini + Backboard is the brain."""
+
+    text: str
+    voice_id: str | None = None
+
+
+@router.post("/tts")
+async def text_to_speech(
+    body: TTSRequest,
+    _: None = Depends(_verify_internal_api_key),
+):
+    """
+    Convert text to speech using ElevenLabs (TTS only). Returns MP3 audio.
+
+    Conversation brain: use Gemini + Backboard (e.g. POST /qa/{session_id} with
+    the user's question), then send the answer text here to get speech.
+    """
+    audio_bytes = await text_to_speech_internal(
+        text=body.text,
+        voice_id=body.voice_id,
+    )
+    return Response(
+        content=audio_bytes,
+        media_type="audio/mpeg",
+    )
+
+
 @router.post("/session")
 async def create_voice_session(
     _: None = Depends(_verify_internal_api_key),
-) -> dict:
+):
     """
-    Create a short-lived ElevenLabs conversational session and return
-    connection details for the caller.
+    Create a new ElevenLabs WebRTC voice session for the configured agent.
 
-    Typical flow:
-    - a hotword listener detects "Hey Assistant"
-    - it calls this endpoint
-    - the frontend then uses the returned data with the ElevenLabs
-      Conversational AI SDK to open a WebRTC / WebSocket connection
-      and run the actual audio conversation loop.
+    Returns:
+      { \"agent_id\", \"webrtc_token\", \"connection_type\" }
+    which the frontend passes to @elevenlabs/client Conversation.startSession.
     """
-    return await create_voice_session_internal()
+    session = await create_voice_session_internal()
+    return session
 
 
-class CreateBackboardThreadBody(BaseModel):
-    """Request body for creating a Backboard thread for voice / thinking."""
+@router.post("/turn")
+async def voice_turn(
+    session_id: str = Form(..., description="Document session ID for QA (Gemini + Backboard)."),
+    audio: UploadFile = File(..., description="Recorded audio (user utterance). Send only after user stops talking."),
+    language_code: str | None = Form(None),
+    _: None = Depends(_verify_internal_api_key),
+):
+    """
+    One voice turn: STT on the uploaded audio → Gemini + Backboard (QA) → TTS.
 
+    Call this only when the user has **finished speaking** (e.g. after silence).
+    Thinking runs once per turn, not while the user is still talking.
+    """
+    audio_bytes = await audio.read()
+    transcript = await speech_to_text_internal(
+        audio_bytes,
+        language_code=language_code,
+    )
+    if not transcript:
+        fallback = "I didn't catch that. Try again when you're ready."
+        audio_bytes = await text_to_speech_internal(text=fallback)
+        return Response(content=audio_bytes, media_type="audio/mpeg")
+    answer = await run_qa_remote(session_id, transcript)
+    if not answer:
+        answer = "I couldn't get an answer for that."
+    audio_bytes = await text_to_speech_internal(text=answer)
+    return Response(content=audio_bytes, media_type="audio/mpeg")
+
+
+# --- Voice consultant: Backboard thread + Gemini + global law → text output to ElevenLabs ---
+
+class BackboardThreadRequest(BaseModel):
+    """Create a new Backboard thread for the voice consultant (conversation memory)."""
     name: str
-
-
-class SaveBackboardMessageBody(BaseModel):
-    """Request body for appending a message to a Backboard thread."""
-
-    thread_id: str
-    role: str
-    content: str
-
-
-class VoiceThinkRequest(BaseModel):
-    """
-    Request body for ElevenLabs to delegate its "thinking" to
-    Backboard + Gemini.
-
-    - thread_id: Backboard thread used as persistent memory
-    - user_utterance: latest transcript from the user
-    - session_id: optional document analysis session for RAG
-    """
-
-    thread_id: str
-    user_utterance: str
-    session_id: Optional[str] = None
 
 
 @router.post("/backboard/thread")
 async def create_backboard_thread(
-    body: CreateBackboardThreadBody,
+    body: BackboardThreadRequest,
     _: None = Depends(_verify_internal_api_key),
-) -> dict:
+):
     """
-    Create a Backboard thread that ElevenLabs voice / thinking can use
-    as persistent memory for a conversation.
+    Create a new Backboard thread for the voice consultant.
+    Frontend calls this before starting the ElevenLabs conversation so the agent
+    has a thread for memory; then each turn uses POST /voice/think with this thread_id.
     """
-    thread_id = await backboard_create_thread(body.name)
+    thread_id = await backboard_create_thread(body.name or "LegaLens Voice Consultant")
     if not thread_id:
         raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Failed to create Backboard thread.",
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Could not create Backboard thread. Check BACKBOARD_API_KEY.",
         )
     return {"thread_id": thread_id}
 
 
-@router.post("/backboard/message")
-async def save_backboard_message(
-    body: SaveBackboardMessageBody,
-    _: None = Depends(_verify_internal_api_key),
-) -> dict:
-    """
-    Append a single message to a Backboard thread.
-
-    Intended to be called from ElevenLabs tools with the current
-    conversation turn (role + content).
-    """
-    await backboard_save(body.thread_id, body.role, body.content)
-    return {"status": "ok"}
-
-
-@router.get("/backboard/history/{thread_id}")
-async def get_backboard_history_for_voice(
-    thread_id: str,
-    _: None = Depends(_verify_internal_api_key),
-) -> dict:
-    """
-    Fetch the full Backboard history for a given thread so the
-    ElevenLabs agent can ground its thinking in prior context.
-    """
-    messages = await backboard_get_history(thread_id)
-    return {"thread_id": thread_id, "messages": messages}
-
-
-# Law and consulting specialist: single "brain" for voice (ElevenLabs → this → answer).
-LAW_CONSULTANT_SYSTEM = """You are a Canadian law and consulting specialist for LegaLens. Your role is to help users understand legal implications and answer questions like "Should I do X?" in a Canadian legal context.
-
-You are a lawyer and do give formal legal advice. You DO:
-- Explain whether a course of action is generally advisable or risky under Canadian law (federal and provincial where relevant).
-- Point to relevant laws or principles (e.g. Canada Labour Code, PIPEDA, consumer protection, contract law).
-- Keep answers concise and clear (2–5 sentences) for voice: no long paragraphs.
-- If the user's question is ambiguous or province-specific, say so briefly.
-
-Always end with exactly: "This is general information, not legal advice."
-"""
-
-
-def _format_recent_history(messages: list) -> str:
-    """Turn Backboard messages into a short context string for the consultant."""
-    if not messages:
-        return ""
-    lines = []
-    for m in messages[-10:]:  # last 10 messages
-        role = m.get("role", "")
-        content = (m.get("content") or "").strip()
-        if not content:
-            continue
-        if "VOICE QUESTION:" in content:
-            content = content.replace("VOICE QUESTION:", "User:").strip()
-        elif "VOICE ANSWER:" in content:
-            content = content.replace("VOICE ANSWER:", "Assistant:").strip()
-        elif role == "user":
-            lines.append(f"User: {content[:500]}")
-        elif role == "assistant":
-            lines.append(f"Assistant: {content[:500]}")
-    if not lines:
-        return ""
-    return "Recent conversation:\n" + "\n".join(lines) + "\n\n"
+class VoiceThinkRequest(BaseModel):
+    """Run Gemini + Backboard for one user utterance; output text is for ElevenLabs TTS."""
+    thread_id: str
+    user_utterance: str
+    session_id: str | None = None
 
 
 @router.post("/think")
 async def voice_think(
     body: VoiceThinkRequest,
     _: None = Depends(_verify_internal_api_key),
-) -> dict:
+):
     """
-    Central brain for ElevenLabs voice: Gemini + Backboard.
-
-    Flow: ElevenLabs (user speech) → this endpoint → Gemini law consultant
-    (with Backboard memory) → answer text → ElevenLabs speaks it.
-
-    Requires thread_id so Backboard remembers the conversation. If missing, returns 400.
+    Speech → Gemini + Backboard (this thread + global law) → answer text → ElevenLabs.
+    Backboard: uses the given thread (new conversation) and the global law context.
+    Returns { answer } so the caller (e.g. ElevenLabs get_legal_answer tool) can speak it via TTS.
     """
-    print("[voice brain] request received", {"user_utterance": (body.user_utterance or "")[:120], "thread_id": (body.thread_id or "")[:20], "session_id": body.session_id})
-    thread_id = (body.thread_id or "").strip()
+    answer = await run_voice_think(
+        thread_id=body.thread_id,
+        user_utterance=body.user_utterance,
+        session_id=body.session_id,
+    )
+    return {"answer": answer}
+
+
+class ContextDocumentRequest(BaseModel):
+    """
+    Add a stored document as context into an existing Backboard thread.
+
+    The document is downloaded from storage, parsed, and passed through the
+    extractor + analyst agents, which both write into the SAME Backboard thread
+    used by the voice consultant. This gives the AI clause-level context for
+    that document without creating a new thread.
+    """
+
+    thread_id: str
+    bucket_path: str
+
+
+@router.post("/context/document")
+async def add_context_document_to_thread(
+    body: ContextDocumentRequest,
+    _: None = Depends(_verify_internal_api_key),
+):
+    """
+    Run extractor + analyst on a stored document and save results into an
+    existing Backboard thread (voice consultant memory).
+    """
+    thread_id = body.thread_id.strip()
     if not thread_id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="thread_id is required so the Backboard agent can remember the conversation.",
+            detail="thread_id is required.",
+        )
+    try:
+        file_bytes = download_file(body.bucket_path)
+    except Exception as e:  # pragma: no cover - storage errors are rare and environment-specific
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to download context document: {e}",
+        ) from e
+
+    filename = body.bucket_path.rsplit("/", 1)[-1] or "document"
+    is_pdf = filename.lower().endswith(".pdf")
+    text = extract_pdf(file_bytes) if is_pdf else extract_docx(file_bytes)
+    if len(text) < 100:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Could not extract enough text from the context document.",
         )
 
-    # Document-grounded mode: reuse the existing QA pipeline (RAG + Backboard)
-    if body.session_id:
-        session_id = body.session_id
-        if session_id not in result_store:
-            raise HTTPException(
-                status.HTTP_404_NOT_FOUND,
-                "No analysis found for this session_id. Run /api/agents/analyze first.",
-            )
-        if session_id not in vector_store:
-            raise HTTPException(
-                status.HTTP_400_BAD_REQUEST,
-                "Vector store unavailable for this session_id.",
-            )
+    doc_type = detect_document_type(text)
 
-        docs = vector_store[session_id].similarity_search(body.user_utterance, k=4)
-        chunks = [d.page_content for d in docs]
-        doc_name = result_store[session_id]["document_name"]
+    # Save document identity so the consultant prompt can say "the contract is X"
+    from app.agents.backboard import backboard_save
+    await backboard_save(
+        thread_id,
+        "assistant",
+        f"CONTEXT_DOCUMENT: {filename} ({doc_type})",
+    )
 
-        answer = await run_qa(doc_name, body.user_utterance, chunks, thread_id)
-        # run_qa already logs Q&A into Backboard.
-        print("[voice brain] output (doc):", answer[:200] + ("..." if len(answer) > 200 else ""))
-        return {"answer": answer}
+    # 1) Extract clauses into this existing Backboard thread
+    clauses = await run_extractor(text, filename, doc_type, thread_id)
 
-    # Law consultant mode (no document): Gemini + Backboard memory as the voice brain
-    history = await backboard_get_history(thread_id)
-    history_block = _format_recent_history(history)
+    # 2) Analyze clauses against Canadian law into the same thread
+    analyzed = await run_analyst(clauses, filename, doc_type, thread_id)
 
-    prompt = f"""{LAW_CONSULTANT_SYSTEM}
-
-{history_block}Current question: {body.user_utterance}
-
-Answer (concise, for voice):"""
-    answer = await call_llm(summarizer_llm(), prompt)
-
-    # Persist to Backboard so the agent remembers this turn
-    await backboard_save(thread_id, "user", f"VOICE QUESTION: {body.user_utterance}")
-    await backboard_save(thread_id, "assistant", f"VOICE ANSWER: {answer}")
-
-    print("[voice brain] output:", answer[:200] + ("..." if len(answer) > 200 else ""))
-    return {"answer": answer}
-
+    return {
+        "document_name": filename,
+        "document_type": doc_type,
+        "clause_count": len(analyzed),
+    }

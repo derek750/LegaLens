@@ -1,8 +1,12 @@
 import os
-from typing import Optional
+import tempfile
 
+import httpx
 from elevenlabs.client import AsyncElevenLabs  # type: ignore[import-not-found]
 from fastapi import HTTPException, status
+
+# Default voice ID (Rachel) if ELEVENLABS_VOICE_ID is not set
+DEFAULT_VOICE_ID = "8j7CWNNX7AHcdYYxls2E"
 
 
 def _get_required_env(name: str) -> str:
@@ -25,32 +29,264 @@ def get_elevenlabs_client() -> AsyncElevenLabs:
     return AsyncElevenLabs(api_key=api_key)
 
 
-async def create_voice_session_internal(agent_id_env: str = "AGENT_ID") -> dict:
-    """
-    Internal helper used by the FastAPI router to create a short-lived
-    ElevenLabs conversational session and return connection details.
-    """
-    agent_id = _get_required_env(agent_id_env)
-    client = get_elevenlabs_client()
+def get_tts_voice_id() -> str:
+    """Return the voice ID for TTS (env ELEVENLABS_VOICE_ID or default)."""
+    return os.getenv("ELEVENLABS_VOICE_ID", DEFAULT_VOICE_ID)
 
-    # For private agents, ElevenLabs requires a WebRTC token.
-    token_response = await client.conversational_ai.conversations.get_webrtc_token(
-        agent_id=agent_id,
+
+def get_convai_agent_id() -> str:
+    """
+    Return the ElevenLabs Conversational AI agent id used for real-time voice.
+
+    Configure ELEVENLABS_CONVAI_AGENT_ID in your backend .env with the agent id
+    from the ElevenLabs dashboard.
+    """
+    return _get_required_env("ELEVENLABS_CONVAI_AGENT_ID")
+
+
+async def text_to_speech_internal(
+    text: str,
+    voice_id: str | None = None,
+    model_id: str = "eleven_multilingual_v2",
+    output_format: str = "mp3_44100_128",
+) -> bytes:
+    """
+    Convert text to speech using ElevenLabs TTS only (no conversational session).
+    Returns raw audio bytes (e.g. MP3). The brain (Gemini + Backboard) is separate.
+    """
+    if not text or not text.strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Text is required for TTS.",
+        )
+    client = get_elevenlabs_client()
+    vid = voice_id or get_tts_voice_id()
+    response = await client.text_to_speech.convert(
+        voice_id=vid,
+        text=text.strip(),
+        model_id=model_id,
+        output_format=output_format,
+    )
+    # SDK may return bytes, a stream, or an httpx-like response
+    if isinstance(response, bytes):
+        return response
+    if hasattr(response, "content"):
+        return response.content
+    if hasattr(response, "read"):
+        return response.read()
+    if hasattr(response, "__iter__") and not isinstance(response, (str, bytes)):
+        return b"".join(response)
+    raise HTTPException(
+        status_code=status.HTTP_502_BAD_GATEWAY,
+        detail="Unexpected TTS response format from ElevenLabs.",
     )
 
-    token: Optional[str] = getattr(token_response, "token", None)
-    if token is None and isinstance(token_response, dict):
-        token = token_response.get("token")
 
-    if not token:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Failed to obtain a WebRTC token from ElevenLabs.",
+async def speech_to_text_internal(
+    audio_bytes: bytes,
+    *,
+    language_code: str | None = None,
+) -> str:
+    """
+    Transcribe audio using ElevenLabs STT. Returns the transcript text.
+    """
+    client = get_elevenlabs_client()
+    # SDK typically expects a file path or file-like for multipart upload
+    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
+        f.write(audio_bytes)
+        path = f.name
+    try:
+        with open(path, "rb") as f:
+            response = await client.speech_to_text.convert(
+                file=f,
+                model_id="scribe_v2",
+                language_code=language_code,
+            )
+    finally:
+        try:
+            os.unlink(path)
+        except OSError:
+            pass
+    # Response is typically an object with .text or similar
+    if hasattr(response, "text"):
+        return (response.text or "").strip()
+    if isinstance(response, dict):
+        return (response.get("text") or "").strip()
+    if isinstance(response, str):
+        return response.strip()
+    return ""
+
+
+def get_qa_base_url() -> str:
+    """Base URL for the API (agents QA lives at /api/agents/qa/{session_id})."""
+    return os.getenv("LEGALENS_QA_BASE_URL", "http://localhost:8000/api").rstrip("/")
+
+
+async def run_qa_remote(session_id: str, question: str) -> str:
+    """
+    Call the QA endpoint (Gemini + Backboard). Used after STT so we only
+    run thinking when the user has finished speaking.
+    """
+    base = get_qa_base_url()
+    url = f"{base}/agents/qa/{session_id}"
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        resp = await client.post(url, json={"question": question})
+        resp.raise_for_status()
+        data = resp.json()
+        return data.get("answer", "")
+
+
+# Prompt for voice consultant. Uses Backboard thread: Canadian law, optional clauses (EXTRACTOR/ANALYST), and Q&A history.
+CONSULTANT_PROMPT = """You are a Canadian legal information consultant for LegaLens (voice assistant).
+Answer in plain English, 2–4 sentences. Be helpful and accurate; say when you are unsure.
+
+Canadian law context (for general principles only):
+{canadian_law}
+{document_context}
+{history}User question: {question}"""
+
+# Max chars of document context (EXTRACTOR + ANALYST) to avoid overflowing the prompt.
+DOCUMENT_CONTEXT_MAX_CHARS = 24_000
+
+
+async def run_voice_think(
+    thread_id: str,
+    user_utterance: str,
+    session_id: str | None = None,
+) -> str:
+    """
+    Voice consultant brain: Backboard thread (new conversation) + global law context → Gemini → answer.
+    Output text is returned for ElevenLabs TTS (caller speaks it).
+    - Uses the given Backboard thread for history and persists this turn there.
+    - Uses global Canadian law context from Backboard (thread or BACKBOARD_LAW_THREAD_ID / scan).
+    - If session_id is set and the agents app has that document, uses document QA; otherwise consultant-only.
+    """
+    from app.agents.backboard import (
+        backboard_get_global_law_context,
+        backboard_get_history,
+        backboard_save,
+    )
+    from app.agents.llm import call_llm, summarizer_llm
+
+    if not (thread_id and user_utterance and user_utterance.strip()):
+        return "Please ask a legal question and I’ll do my best to help."
+
+    # Document-specific path: use existing QA endpoint so document context + Backboard doc thread are used.
+    if session_id and session_id.strip():
+        answer = await run_qa_remote(session_id.strip(), user_utterance.strip())
+        if answer:
+            await backboard_save(thread_id, "user", f"Q&A — Question: {user_utterance.strip()}")
+            await backboard_save(thread_id, "assistant", f"Q&A — Answer: {answer}")
+        return answer or "I couldn’t get an answer for that document. Try rephrasing or select a document first."
+
+    # Consultant path: global law + this Backboard thread (including EXTRACTOR/ANALYST if context doc was added).
+    canadian_law = await backboard_get_global_law_context(thread_id)
+    history = await backboard_get_history(thread_id)
+
+    # Include document context from this thread so the agent can use extracted/analyzed clauses.
+    context_doc_line = ""
+    extractor_parts = []
+    analyst_parts = []
+    for m in history:
+        content = m.get("content") or ""
+        if not isinstance(content, str):
+            continue
+        if content.startswith("CONTEXT_DOCUMENT:"):
+            context_doc_line = content.strip()
+        elif content.startswith("EXTRACTOR:"):
+            extractor_parts.append(content)
+        elif content.startswith("ANALYST:"):
+            analyst_parts.append(content)
+    doc_parts = []
+    if extractor_parts:
+        doc_parts.append(extractor_parts[-1])
+    if analyst_parts:
+        doc_parts.append(analyst_parts[-1])
+    document_context_str = "\n\n".join(doc_parts)
+    if len(document_context_str) > DOCUMENT_CONTEXT_MAX_CHARS:
+        document_context_str = document_context_str[: DOCUMENT_CONTEXT_MAX_CHARS] + "\n\n[truncated]"
+    if document_context_str:
+        doc_identity = context_doc_line.replace("CONTEXT_DOCUMENT:", "").strip() if context_doc_line else "the user's document"
+        document_context_str = (
+            "--- CONTRACT TO USE RIGHT NOW (only source for this conversation) ---\n"
+            "Document: "
+            + doc_identity
+            + "\n\n"
+            "The following is the ONLY contract information you have. It is the clause extraction and risk analysis "
+            "uploaded to this conversation. Look at this and only this when answering questions about the contract. "
+            "Do not refer to or infer from anything else. Do not say you cannot see or identify the contract.\n\n"
+            + document_context_str
+            + "\n--- END CONTRACT ---\n\n"
         )
+    else:
+        document_context_str = ""
 
-    return {
-        "agent_id": agent_id,
-        "webrtc_token": token,
-        "connection_type": "webrtc",
-    }
+    past_qa = [m.get("content", "") for m in history if isinstance(m.get("content"), str) and m["content"].startswith("Q&A")]
+    history_str = ""
+    if past_qa:
+        history_str = "Previous exchange:\n" + "\n".join(past_qa[-3:]) + "\n\n"
+
+    prompt = CONSULTANT_PROMPT.format(
+        canadian_law=canadian_law,
+        document_context=document_context_str,
+        history=history_str,
+        question=user_utterance.strip(),
+    )
+    try:
+        answer = await call_llm(summarizer_llm(), prompt)
+        await backboard_save(thread_id, "user", f"Q&A — Question: {user_utterance.strip()}")
+        await backboard_save(thread_id, "assistant", f"Q&A — Answer: {answer}")
+        return answer
+    except Exception as e:
+        return f"Sorry, I couldn’t complete that. ({e!s})"
+
+
+async def create_voice_session_internal() -> dict:
+    """
+    Create a new ElevenLabs WebRTC conversation token for the configured agent.
+
+    This calls ElevenLabs GET /v1/convai/conversation/token with:
+      - xi-api-key: ELEVENLABS_API_KEY
+      - agent_id: ELEVENLABS_CONVAI_AGENT_ID
+
+    Returns a dict shaped for the frontend Conversation.startSession call:
+      { "agent_id", "webrtc_token", "connection_type" }.
+    """
+    api_key = _get_required_env("ELEVENLABS_API_KEY")
+    agent_id = get_convai_agent_id()
+    base_url = os.getenv("ELEVENLABS_BASE_URL", "https://api.elevenlabs.io").rstrip("/")
+    url = f"{base_url}/v1/convai/conversation/token"
+
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        try:
+            resp = await client.get(
+                url,
+                params={"agent_id": agent_id},
+                headers={"xi-api-key": api_key},
+            )
+            resp.raise_for_status()
+        except httpx.HTTPStatusError as e:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=f"ElevenLabs conversation token request failed: {e.response.text}",
+            ) from e
+        except httpx.HTTPError as e:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=f"Could not reach ElevenLabs for conversation token: {e}",
+            ) from e
+
+        data = resp.json()
+        token = data.get("token")
+        if not token:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail="ElevenLabs did not return a WebRTC token.",
+            )
+
+        return {
+            "agent_id": agent_id,
+            "webrtc_token": token,
+            "connection_type": "webrtc",
+        }
 
