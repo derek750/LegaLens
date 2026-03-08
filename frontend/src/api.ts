@@ -218,6 +218,22 @@ export async function negotiateDocument(
   return data as NegotiationResult;
 }
 
+export type EditedTextResult = {
+  session_id: string;
+  document_name: string;
+  edited_text: string;
+  replacements: number;
+};
+
+export async function getEditedText(
+  sessionId: string
+): Promise<EditedTextResult> {
+  const res = await apiFetch(`/agents/edited-text/${sessionId}`);
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.detail || "Failed to get edited text");
+  return data as EditedTextResult;
+}
+
 type VoiceSessionResponse = {
   agent_id: string;
   webrtc_token: string;

@@ -8,6 +8,7 @@ import Documents from './pages/Documents';
 import Viewer from './pages/Viewer';
 import Negotiate from './pages/Negotiate';
 import Consultant from './pages/Consultant';
+import EditDocument from './pages/EditDocument';
 
 function Auth0ProviderWithCallback({ children }) {
   const navigate = useNavigate();
@@ -38,6 +39,7 @@ function App() {
             <Route path="/documents" element={<Documents />} />
             <Route path="/viewer" element={<Viewer />} />
             <Route path="/negotiate" element={<Negotiate />} />
+            <Route path="/edit" element={<EditDocument />} />
             <Route path="/consultant" element={<Consultant />} />
             {/* Legacy redirect */}
             <Route path="/dashboard" element={<Documents />} />

@@ -35,6 +35,7 @@ from app.agents.summarizer import run_qa, run_summarizer
 from app.agents.validator import run_validator
 from app.db.analyses import save_analysis
 from app.db.negotiated_clauses import get_negotiated_clauses_cached, save_negotiated_clauses
+from app.db.storage import download_file
 
 router = APIRouter(prefix="/agents", tags=["agents"])
 
@@ -259,6 +260,58 @@ async def negotiate(session_id: str):
         "should_push": [n for n in negotiations if n["priority"] == "SHOULD PUSH BACK"],
         "accept_if_needed": [n for n in negotiations if n["priority"] == "ACCEPT IF NEEDED"],
         "total": len(negotiations),
+    }
+
+
+@router.get("/edited-text/{session_id}")
+async def get_edited_text(session_id: str):
+    """Return the full document text with negotiated rewritten clauses replacing the originals."""
+    if session_id not in result_store:
+        raise HTTPException(404, "No analysis found. Run /analyze first.")
+    doc = document_store.get(session_id)
+    if not doc:
+        raise HTTPException(404, "No document data for this session.")
+
+    if not doc.get("text") and doc.get("bucket_path"):
+        try:
+            file_bytes = download_file(doc["bucket_path"])
+            is_pdf = doc.get("name", "").lower().endswith(".pdf")
+            doc["text"] = extract_pdf(file_bytes) if is_pdf else extract_docx(file_bytes)
+        except Exception as e:
+            raise HTTPException(500, f"Failed to retrieve document text: {e}")
+
+    if not doc.get("text"):
+        raise HTTPException(404, "Original document text not available for this session.")
+
+    import re
+
+    result = result_store[session_id]
+    document_id = doc.get("document_id")
+    negotiations = []
+    if document_id:
+        negotiations = get_negotiated_clauses_cached(document_id)
+
+    raw_text = doc["text"]
+    # Normalize whitespace so clause text (cleaned by the LLM) can match
+    # the raw PDF-extracted text (which often has \n between every word).
+    text = re.sub(r"\s+", " ", raw_text).strip()
+
+    actual_replacements = 0
+    for clause in negotiations:
+        original = clause.get("original_text", "")
+        rewritten = clause.get("rewritten_clause", "")
+        if not original or not rewritten:
+            continue
+        norm_original = re.sub(r"\s+", " ", original).strip()
+        if norm_original in text:
+            text = text.replace(norm_original, rewritten, 1)
+            actual_replacements += 1
+
+    return {
+        "session_id": session_id,
+        "document_name": result.get("document_name", "document"),
+        "edited_text": text,
+        "replacements": actual_replacements,
     }
 
 

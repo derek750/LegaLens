@@ -94,17 +94,7 @@ const Uploader = () => {
                 <h2 className="text-3xl md:text-5xl font-semibold text-[#17282E] mb-6 leading-tight tracking-tight">
                     Find{' '}
                     <AnimatedHighlight text="predatory" highlightColor="rgba(248, 113, 113, 0.6)" />{' '}
-                    clauses{' '}
-                    <AnimatedHighlight
-                        text="before you sign"
-                        highlightColor="rgba(250, 204, 21, 0.6)"
-                        delayOffset={0.4}
-                    />{' '}, then{' '}
-                    <AnimatedHighlight
-                        text="negotiate."
-                        highlightColor="rgba(201, 232, 215, 0.85)"
-                        delayOffset={0.4}
-                    />
+                    clauses before you sign, then{' '}<AnimatedHighlight text="negotiate" highlightColor="#C9E8D7" />.
                 </h2>
             </div>
 

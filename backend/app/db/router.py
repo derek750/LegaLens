@@ -99,6 +99,7 @@ async def analyze_document(
             "type": cached.get("document_type", ""),
             "page_map": [],
             "document_id": document_id,
+            "bucket_path": doc.get("bucket_path", ""),
         }
         return StreamingResponse(
             _stream_cached_analysis(session_id, result),

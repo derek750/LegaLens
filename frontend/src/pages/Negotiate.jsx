@@ -55,18 +55,17 @@ export default function Negotiate() {
                         <button
                             type="button"
                             onClick={() => navigate('/viewer')}
-                            className="px-4 py-2 text-sm font-medium border border-[#604B42]/30 text-[#604B42] hover:bg-[#F5F0EC] transition-colors rounded"
+                            className="px-4 py-2 pixel-button text-sm font-medium border border-[#604B42]/30 text-[#604B42] bg-[#F5F0EC] hover:bg-[#E8E0D9] transition-colors"
                         >
                             Back to Viewer
                         </button>
                         {negotiationResult && (
                             <button
                                 type="button"
-                                onClick={handleNegotiate}
-                                disabled={negotiationLoading}
-                                className="px-4 py-2 text-sm font-medium border border-[#604B42]/30 text-[#604B42] hover:bg-[#F5F0EC] transition-colors rounded disabled:opacity-60"
+                                onClick={() => navigate('/edit')}
+                                className="px-5 py-2 pixel-button text-sm font-medium bg-[#17282E] text-[#EBE6E3] hover:bg-[#17282E]/90 transition-colors"
                             >
-                                Regenerate
+                                Apply &amp; Edit Document
                             </button>
                         )}
                     </div>
@@ -99,66 +98,69 @@ export default function Negotiate() {
 
                 {negotiationResult && (
                     <div className="space-y-6">
-                        <div className="flex gap-4 text-xs font-medium">
-                            <span className="px-2.5 py-1 bg-red-100 text-red-700 rounded">
+                        <div className="flex gap-3 text-xs font-medium">
+                            <span className="px-2.5 py-1 bg-red-100 text-red-700 border border-red-200">
                                 Must Fight: {negotiationResult.must_fight.length}
                             </span>
-                            <span className="px-2.5 py-1 bg-amber-100 text-amber-700 rounded">
+                            <span className="px-2.5 py-1 bg-amber-100 text-amber-700 border border-amber-200">
                                 Should Push Back: {negotiationResult.should_push.length}
                             </span>
-                            <span className="px-2.5 py-1 bg-gray-100 text-gray-600 rounded">
+                            <span className="px-2.5 py-1 bg-[#F5F0EC] text-[#604B42] border border-[#604B42]/25">
                                 Accept If Needed: {negotiationResult.accept_if_needed.length}
                             </span>
                         </div>
 
                         {[
-                            { label: 'Must Fight', items: negotiationResult.must_fight, borderColor: 'border-red-400', bgColor: 'bg-red-50', badgeColor: 'bg-red-500', textColor: 'text-red-700' },
-                            { label: 'Should Push Back', items: negotiationResult.should_push, borderColor: 'border-amber-400', bgColor: 'bg-amber-50', badgeColor: 'bg-amber-400', textColor: 'text-amber-700' },
-                            { label: 'Accept If Needed', items: negotiationResult.accept_if_needed, borderColor: 'border-gray-300', bgColor: 'bg-gray-50', badgeColor: 'bg-gray-400', textColor: 'text-gray-600' },
+                            { label: 'Must Fight', items: negotiationResult.must_fight, accent: 'border-red-400', headerBg: 'bg-red-50', badgeColor: 'bg-red-500', textColor: 'text-red-700' },
+                            { label: 'Should Push Back', items: negotiationResult.should_push, accent: 'border-amber-400', headerBg: 'bg-amber-50', badgeColor: 'bg-amber-400', textColor: 'text-amber-700' },
+                            { label: 'Accept If Needed', items: negotiationResult.accept_if_needed, accent: 'border-[#604B42]/30', headerBg: 'bg-[#F5F0EC]', badgeColor: 'bg-[#604B42]/50', textColor: 'text-[#604B42]' },
                         ].filter(g => g.items.length > 0).map(group => (
                             <div key={group.label}>
                                 <div className="flex items-center gap-2 mb-3">
-                                    <span className={`w-2.5 h-2.5 rounded-full ${group.badgeColor}`} />
+                                    <span className={`w-2.5 h-2.5 ${group.badgeColor}`} />
                                     <h4 className={`text-sm font-semibold ${group.textColor}`}>{group.label}</h4>
                                 </div>
                                 <div className="space-y-4">
                                     {group.items.map(clause => (
-                                        <div key={clause.id} className={`border ${group.borderColor} rounded-lg overflow-hidden`}>
-                                            <div className={`px-4 py-2.5 ${group.bgColor} border-b ${group.borderColor}`}>
-                                                <div className="flex items-center justify-between">
-                                                    <span className="text-sm font-semibold text-[#17282E]">{clause.type}</span>
-                                                    <span className={`text-[10px] font-bold ${group.textColor}`}>{clause.severity}</span>
-                                                </div>
-                                            </div>
-                                            <div className="p-4 space-y-4">
-                                                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                                                    <div>
-                                                        <p className="text-[10px] uppercase font-bold text-red-500 mb-1.5 tracking-wider">Original (Problematic)</p>
-                                                        <div className="text-xs text-[#604B42] bg-red-50/60 border border-red-200 rounded p-3 leading-relaxed">
-                                                            {clause.original_text}
-                                                        </div>
-                                                    </div>
-                                                    <div>
-                                                        <p className="text-[10px] uppercase font-bold text-emerald-600 mb-1.5 tracking-wider">Rewritten (Fair)</p>
-                                                        <div className="text-xs text-[#17282E] bg-emerald-50/60 border border-emerald-200 rounded p-3 leading-relaxed">
-                                                            {clause.rewritten_clause}
-                                                        </div>
+                                        <div key={clause.id} className="relative">
+                                            <div className="absolute inset-0 translate-x-[3px] translate-y-[3px] bg-[#17282E]/20" />
+                                            <div className={`relative border ${group.accent} bg-white overflow-hidden`}>
+                                                <div className={`px-4 py-2.5 ${group.headerBg} border-b ${group.accent}`}>
+                                                    <div className="flex items-center justify-between">
+                                                        <span className="text-sm font-semibold text-[#17282E]">{clause.type}</span>
+                                                        <span className={`text-[10px] font-bold ${group.textColor}`}>{clause.severity}</span>
                                                     </div>
                                                 </div>
+                                                <div className="p-4 space-y-4">
+                                                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                                                        <div>
+                                                            <p className="text-[10px] uppercase font-bold text-red-500 mb-1.5 tracking-wider">Original (Problematic)</p>
+                                                            <div className="text-xs text-[#604B42] bg-red-50/60 border border-red-200 p-3 leading-relaxed">
+                                                                {clause.original_text}
+                                                            </div>
+                                                        </div>
+                                                        <div>
+                                                            <p className="text-[10px] uppercase font-bold text-emerald-600 mb-1.5 tracking-wider">Rewritten (Fair)</p>
+                                                            <div className="text-xs text-[#17282E] bg-emerald-50/60 border border-emerald-200 p-3 leading-relaxed">
+                                                                {clause.rewritten_clause}
+                                                            </div>
+                                                        </div>
+                                                    </div>
 
-                                                <div className="border-t border-[#604B42]/10 pt-3 space-y-2.5">
-                                                    <div>
-                                                        <p className="text-[10px] uppercase font-bold text-[#604B42]/60 mb-1 tracking-wider">What to Say</p>
-                                                        <p className="text-xs text-[#17282E] italic leading-relaxed">&ldquo;{clause.negotiation_script}&rdquo;</p>
-                                                    </div>
-                                                    <div className="flex flex-col sm:flex-row gap-3">
-                                                        <div className="flex-1">
-                                                            <p className="text-[10px] uppercase font-bold text-[#604B42]/60 mb-1 tracking-wider">Your Leverage</p>
-                                                            <p className="text-xs text-[#604B42]">{clause.leverage}</p>
+                                                    <div className="border-t border-[#604B42]/10 pt-3 space-y-2.5">
+                                                        <div>
+                                                            <p className="text-[10px] uppercase font-bold text-[#604B42]/60 mb-1 tracking-wider">What to Say</p>
+                                                            <p className="text-xs text-[#17282E] italic leading-relaxed">&ldquo;{clause.negotiation_script}&rdquo;</p>
                                                         </div>
-                                                        <div className="flex-1">
-                                                            <p className="text-[10px] uppercase font-bold text-[#604B42]/60 mb-1 tracking-wider">Fallback Position</p>
-                                                            <p className="text-xs text-[#604B42]">{clause.fallback_position}</p>
+                                                        <div className="flex flex-col sm:flex-row gap-3">
+                                                            <div className="flex-1">
+                                                                <p className="text-[10px] uppercase font-bold text-[#604B42]/60 mb-1 tracking-wider">Your Leverage</p>
+                                                                <p className="text-xs text-[#604B42]">{clause.leverage}</p>
+                                                            </div>
+                                                            <div className="flex-1">
+                                                                <p className="text-[10px] uppercase font-bold text-[#604B42]/60 mb-1 tracking-wider">Fallback Position</p>
+                                                                <p className="text-xs text-[#604B42]">{clause.fallback_position}</p>
+                                                            </div>
                                                         </div>
                                                     </div>
                                                 </div>
