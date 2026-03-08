@@ -1,18 +1,23 @@
 # Build and deploy LegaLens API to Google Cloud Run.
-# Set Cloud Build trigger root directory to "backend", or run from backend:
-#   gcloud builds submit --config=cloudbuild.yaml .
 #
-# Substitutions (set in trigger or pass with --substitutions):
+# Trigger (repo root): config backend/cloudbuild.yaml; defaults use backend/Dockerfile and backend/.
+# Manual (from backend/):  gcloud builds submit --config=cloudbuild.yaml . --substitutions="_DOCKERFILE=Dockerfile,_CONTEXT=."
+#
+# Substitutions:
 #   _SERVICE_NAME  Cloud Run service name (default: legalens-api)
 #   _REGION        e.g. us-central1 (default: us-central1)
 #   _REPOSITORY    Artifact Registry repo name (default: legalens)
-#   _TAG           Image tag; default "latest" for manual submit. In a trigger, set to SHORT_SHA.
+#   _TAG           Image tag (default: latest; trigger can set to SHORT_SHA)
+#   _DOCKERFILE    Dockerfile path (default: backend/Dockerfile for trigger from repo root)
+#   _CONTEXT       Build context (default: backend for trigger from repo root)
 
 substitutions:
   _SERVICE_NAME: legalens-api
   _REGION: us-central1
   _REPOSITORY: legalens
   _TAG: latest
+  _DOCKERFILE: backend/Dockerfile
+  _CONTEXT: backend
 
 options:
   logging: CLOUD_LOGGING_ONLY
@@ -21,9 +26,11 @@ steps:
   - name: gcr.io/cloud-builders/docker
     args:
       - build
+      - -f
+      - ${_DOCKERFILE}
       - -t
       - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/${_SERVICE_NAME}:${_TAG}
-      - .
+      - ${_CONTEXT}
     id: build
 
   - name: gcr.io/cloud-builders/docker

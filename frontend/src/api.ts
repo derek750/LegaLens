@@ -1,5 +1,5 @@
-const API_BASE =
-  (typeof import.meta !== "undefined" && (import.meta as { env?: Record<string, string> }).env?.VITE_API_URL) || "/api";
+const raw = (typeof import.meta !== "undefined" && (import.meta as { env?: Record<string, string> }).env?.VITE_API_URL) || "";
+const API_BASE = raw ? (raw.replace(/\/+$/, "").endsWith("/api") ? raw.replace(/\/+$/, "") : raw.replace(/\/+$/, "") + "/api") : "/api";
 
 let _getAccessToken: (() => Promise<string>) | null = null;
 
