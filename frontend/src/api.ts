@@ -69,6 +69,25 @@ export type AnalysisRejected = {
   suggestion?: string;
 };
 
+export type AnalyzedClause = {
+  id: string;
+  type: string;
+  raw_text: string;
+  location: string;
+  severity: "LOW" | "MEDIUM" | "HIGH";
+  severity_reason?: string;
+  plain_english?: string;
+  canadian_law?: string;
+  baseline_comparison?: string;
+  negotiation_tip?: string;
+  line_start?: number;
+  line_end?: number;
+  char_start?: number;
+  char_end?: number;
+  page_start?: number;
+  page_end?: number;
+};
+
 export type AnalysisResult = {
   session_id: string;
   thread_id: string;
@@ -78,7 +97,7 @@ export type AnalysisResult = {
   executive_summary: string;
   top_risks: string[];
   bottom_line: string;
-  analyzed_clauses: unknown[];
+  analyzed_clauses: AnalyzedClause[];
   clause_count: number;
 };
 

@@ -27,8 +27,10 @@ from app.agents.documents import (
     detect_document_type,
     extract_docx,
     extract_pdf,
+    extract_pdf_with_pages,
 )
 from app.agents.extractor import run_extractor
+from app.agents.negotiate import run_negotiator
 from app.agents.summarizer import run_qa, run_summarizer
 from app.agents.validator import run_validator
 
@@ -52,11 +54,14 @@ async def register_document_from_bytes(
     Register a document in the pipeline stores (used by upload or by stored-doc analyze).
     Parses text, creates Backboard thread, builds vector store.
     """
-    text = extract_pdf(file_bytes) if is_pdf else extract_docx(file_bytes)
+    if is_pdf:
+        text, page_map = extract_pdf_with_pages(file_bytes)
+    else:
+        text, page_map = extract_docx(file_bytes), []
     if len(text) < 100:
         raise ValueError("Could not extract enough text from the document.")
     doc_type = detect_document_type(text)
-    document_store[session_id] = {"text": text, "name": filename, "type": doc_type}
+    document_store[session_id] = {"text": text, "name": filename, "type": doc_type, "page_map": page_map}
     thread_id = await backboard_create_thread(filename)
     thread_store[session_id] = thread_id or ""
     if thread_id:
@@ -96,7 +101,7 @@ async def run_analysis_stream(session_id: str) -> AsyncGenerator[str, None]:
             doc["type"] = validation["suggested_type"]
 
         yield sse({"event": "progress", "agent": "extractor", "message": "Scanning for legal clauses..."})
-        clauses = await run_extractor(doc["text"], doc["name"], doc["type"], thread_id)
+        clauses = await run_extractor(doc["text"], doc["name"], doc["type"], thread_id, page_map=doc.get("page_map"))
 
         yield sse({
             "event": "progress",
@@ -143,14 +148,17 @@ async def upload(file: UploadFile = File(...)):
         raise HTTPException(400, "Only PDF and DOCX supported.")
 
     data = await file.read()
-    text = extract_pdf(data) if "pdf" in file.content_type else extract_docx(data)
+    if "pdf" in file.content_type:
+        text, page_map = extract_pdf_with_pages(data)
+    else:
+        text, page_map = extract_docx(data), []
 
     if len(text) < 100:
         raise HTTPException(400, "Could not extract text. Is this a scanned image?")
 
     session_id = str(uuid.uuid4())
     doc_type = detect_document_type(text)
-    document_store[session_id] = {"text": text, "name": file.filename, "type": doc_type}
+    document_store[session_id] = {"text": text, "name": file.filename, "type": doc_type, "page_map": page_map}
 
     # Single Backboard thread for this document; used for extract → analyze → summarize.
     thread_id = await backboard_create_thread(file.filename)
@@ -190,6 +198,38 @@ def get_result(session_id: str):
     if session_id not in result_store:
         raise HTTPException(404, "No result yet. Run /analyze/{session_id} first.")
     return result_store[session_id]
+
+
+@router.get("/negotiate/{session_id}")
+async def negotiate(session_id: str):
+    """
+    Returns a full negotiation strategy for every HIGH and MEDIUM clause.
+    Each clause gets: rewritten version, negotiation script, priority,
+    leverage points, and a fallback position.
+
+    Call this after /analyze/{session_id} completes.
+    """
+    if session_id not in result_store:
+        raise HTTPException(404, "No analysis found. Run /analyze first.")
+
+    result = result_store[session_id]
+    thread_id = thread_store.get(session_id, "")
+
+    negotiations = await run_negotiator(
+        result["analyzed_clauses"],
+        result["document_name"],
+        result["document_type"],
+        thread_id,
+    )
+
+    return {
+        "session_id": session_id,
+        "document_name": result["document_name"],
+        "must_fight": [n for n in negotiations if n["priority"] == "MUST FIGHT"],
+        "should_push": [n for n in negotiations if n["priority"] == "SHOULD PUSH BACK"],
+        "accept_if_needed": [n for n in negotiations if n["priority"] == "ACCEPT IF NEEDED"],
+        "total": len(negotiations),
+    }
 
 
 class QARequest(BaseModel):

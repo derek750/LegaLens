@@ -562,20 +562,24 @@ export default function Dashboard() {
                     </>
                 )}
 
-                {/* Viewer tab – in‑app document preview placeholder */}
+                {/* Viewer tab — PDF with clause highlights */}
                 {activeTab === 'viewer' && (
                     <div className="relative">
                         <div className="absolute inset-0 translate-x-[4px] translate-y-[4px] bg-[#17282E]/25" />
                         <div className="relative glass-panel border border-[#604B42]/25 p-8">
                             {viewerDoc ? (
                                 <>
-                                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-6">
+                                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-4">
                                         <div>
                                             <h3 className="text-xl font-semibold text-[#17282E]">
                                                 {viewerDoc.filename}
                                             </h3>
                                             <p className="text-xs text-[#604B42] mt-1">
-                                                In‑app preview (placeholder). In the full version, this area will show your document with highlighted clauses.
+                                                Predatory clauses are{' '}
+                                                <span className="inline-block w-3 h-2 rounded-sm align-middle" style={{ backgroundColor: 'rgba(239,68,68,0.35)' }} />{' '}
+                                                highlighted in red, risky clauses in{' '}
+                                                <span className="inline-block w-3 h-2 rounded-sm align-middle" style={{ backgroundColor: 'rgba(250,204,21,0.45)' }} />{' '}
+                                                yellow.
                                             </p>
                                         </div>
                                         <div className="text-xs text-right text-[#604B42] space-y-1">
@@ -590,44 +594,78 @@ export default function Dashboard() {
                                     </div>
 
                                     <div className="flex flex-col lg:flex-row gap-6">
-                                        <div className="flex-1 min-h-[420px] border border-[#604B42]/30 bg-white overflow-hidden">
+                                        <div className="flex-1 h-[650px] border border-[#604B42]/30 bg-white overflow-hidden">
                                             {viewerUrl ? (
-                                                <iframe
-                                                    title={viewerDoc.filename}
-                                                    src={viewerUrl}
+                                                <PdfHighlightViewer
+                                                    url={viewerUrl}
+                                                    clauses={analysisResult?.analyzed_clauses}
                                                     className="w-full h-full"
                                                 />
                                             ) : (
                                                 <div className="w-full h-full flex items-center justify-center text-sm text-[#604B42] px-6 text-center">
-                                                    Document preview will appear here once the backend returns an embeddable viewer URL.
+                                                    Loading document…
                                                 </div>
                                             )}
                                         </div>
 
-                                        <div className="w-full lg:w-72 border border-[#604B42]/30 bg-[#F5F0EC]/80 px-4 py-3 text-xs text-[#604B42] space-y-3">
+                                        <div className="w-full lg:w-80 border border-[#604B42]/30 bg-[#F5F0EC]/80 px-4 py-3 text-xs text-[#604B42] overflow-y-auto max-h-[650px] space-y-3">
                                             <p className="font-semibold text-[#17282E]">
                                                 Analysis
                                             </p>
                                             {analysisLoading && (
-                                                <p className="text-[#604B42]">{analysisProgress || 'Running pipeline…'}</p>
+                                                <p className="text-[#604B42] animate-pulse">{analysisProgress || 'Running pipeline…'}</p>
                                             )}
                                             {analysisError && (
                                                 <p className="text-red-600">{analysisError}</p>
                                             )}
                                             {analysisResult && !analysisLoading && (
-                                                <div className="space-y-2">
+                                                <div className="space-y-3">
                                                     <p className="font-medium text-[#17282E]">{analysisResult.bottom_line}</p>
                                                     <p className="text-[11px]">{analysisResult.executive_summary}</p>
                                                     <p>
                                                         <span className="font-medium">Risk: </span>
-                                                        <span className={analysisResult.overall_risk_score === 'HIGH' || analysisResult.overall_risk_score === 'CRITICAL' ? 'text-red-600' : analysisResult.overall_risk_score === 'MEDIUM' ? 'text-amber-600' : 'text-[#604B42]'}>
+                                                        <span className={
+                                                            analysisResult.overall_risk_score === 'HIGH' || analysisResult.overall_risk_score === 'CRITICAL'
+                                                                ? 'text-red-600 font-semibold'
+                                                                : analysisResult.overall_risk_score === 'MEDIUM'
+                                                                    ? 'text-amber-600 font-semibold'
+                                                                    : 'text-[#604B42]'
+                                                        }>
                                                             {analysisResult.overall_risk_score}
                                                         </span>
                                                         {' · '}{analysisResult.clause_count} clauses
                                                     </p>
+
+                                                    {analysisResult.analyzed_clauses?.filter(c => c.severity === 'HIGH' || c.severity === 'MEDIUM').length > 0 && (
+                                                        <div className="border-t border-[#604B42]/20 pt-3">
+                                                            <p className="font-semibold text-[#17282E] mb-2">Flagged clauses</p>
+                                                            <div className="space-y-2">
+                                                                {analysisResult.analyzed_clauses
+                                                                    .filter(c => c.severity === 'HIGH' || c.severity === 'MEDIUM')
+                                                                    .map(clause => (
+                                                                        <div key={clause.id} className={`p-2 border rounded ${clause.severity === 'HIGH' ? 'border-red-300 bg-red-50' : 'border-yellow-300 bg-yellow-50'}`}>
+                                                                            <div className="flex items-center gap-1.5 mb-1">
+                                                                                <span className={`inline-block w-2 h-2 rounded-full ${clause.severity === 'HIGH' ? 'bg-red-500' : 'bg-yellow-400'}`} />
+                                                                                <span className="font-semibold text-[#17282E]">{clause.type}</span>
+                                                                                <span className={`ml-auto text-[10px] font-bold ${clause.severity === 'HIGH' ? 'text-red-600' : 'text-amber-600'}`}>
+                                                                                    {clause.severity}
+                                                                                    {clause.page_start ? ` · p.${clause.page_start}` : ''}
+                                                                                </span>
+                                                                            </div>
+                                                                            {clause.plain_english && <p className="text-[11px] text-[#604B42] mb-1">{clause.plain_english}</p>}
+                                                                            {clause.severity_reason && <p className="text-[10px] text-[#604B42]/80 italic">{clause.severity_reason}</p>}
+                                                                            {clause.negotiation_tip && (
+                                                                                <p className="text-[10px] text-[#17282E] mt-1"><span className="font-semibold">Tip:</span> {clause.negotiation_tip}</p>
+                                                                            )}
+                                                                        </div>
+                                                                    ))}
+                                                            </div>
+                                                        </div>
+                                                    )}
+
                                                     {analysisResult.top_risks?.length > 0 && (
-                                                        <div>
-                                                            <p className="font-medium text-[#17282E] mb-1">Top risks</p>
+                                                        <div className="border-t border-[#604B42]/20 pt-3">
+                                                            <p className="font-semibold text-[#17282E] mb-1">Top risks</p>
                                                             <ul className="list-disc list-inside space-y-0.5">
                                                                 {analysisResult.top_risks.map((r, i) => (
                                                                     <li key={i}>{r}</li>

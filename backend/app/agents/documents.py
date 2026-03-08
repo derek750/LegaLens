@@ -32,6 +32,19 @@ def extract_pdf(data: bytes) -> str:
     return "".join(p.extract_text() or "" for p in reader.pages).strip()
 
 
+def extract_pdf_with_pages(data: bytes) -> tuple[str, list[dict]]:
+    """Extract text and build a page boundary map so clauses can be pinned to PDF pages."""
+    reader = PyPDF2.PdfReader(io.BytesIO(data))
+    page_map: list[dict] = []
+    full_text = ""
+    for i, page in enumerate(reader.pages):
+        page_text = page.extract_text() or ""
+        start = len(full_text)
+        full_text += page_text
+        page_map.append({"page": i + 1, "char_start": start, "char_end": len(full_text)})
+    return full_text.strip(), page_map
+
+
 def extract_docx(data: bytes) -> str:
     doc = python_docx.Document(io.BytesIO(data))
     return "\n".join(p.text for p in doc.paragraphs).strip()
