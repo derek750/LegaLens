@@ -29,7 +29,7 @@ export default function Layout({ children }) {
 
     return (
         <div className="min-h-screen bg-[#EBE6E3] text-[#17282E] flex flex-col font-sans">
-            <header className="sticky top-0 z-50 bg-[#17282E] text-[#EBE6E3] border-b-4 border-[#4F3D35] shadow-[0_4px_0_0_#604B42] px-6 py-4">
+            <header className="sticky top-0 z-50 bg-[#05213d] text-[#EBE6E3] border-b-4 border-[#4F3D35] shadow-[0_4px_0_0_#604B42] px-6 py-4">
                 <div className="flex items-center justify-between">
                     <Link to="/" className="flex items-center gap-3 cursor-pointer group">
                         <img src="/logo.png" alt="Logo" className="h-10 w-auto object-contain group-hover:opacity-90 transition-opacity" />
