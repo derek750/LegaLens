@@ -1,4 +1,8 @@
-# LegaLens
+<p align="center">
+  <img src="frontend/public/logo.png" alt="Logo" width="160" />
+</p>
+
+<h1 align="center">LegaLens</h1>
 
 LegaLens is an AI-powered legal document assistant. Upload contracts (PDF or DOCX), get clause-level analysis against Canadian law, negotiation strategies, and a voice consultant—all backed by Gemini, LangChain, and a RAG pipeline over a legal knowledge base.
 
@@ -11,10 +15,9 @@ LegaLens is an AI-powered legal document assistant. Upload contracts (PDF or DOC
 | **Frontend** | React, TypeScript, Tailwind CSS, Vite; deployed on **Vercel** |
 | **Auth** | **Auth0** |
 | **Backend** | **FastAPI** on **Google Cloud** (Cloud Run) |
-| **Database / BaaS** | **Supabase** |
-| **Voice** | **ElevenLabs** (TTS/conversation), **Picovoice** (wake word) |
-| **LLM & orchestration** | **Gemini** via **backboard.io**, **LangChain**, **RAG** over a **Laws** knowledge base |
-| **AI pipeline** | Validator → Extractor → Analyzer → Summarizer agents, with negotiation and Q&A |
+| **Database** | **Supabase** |
+| **Voice** | **ElevenLabs**, **Picovoice** |
+| **AI Agents** | **Gemini**, **Backboardio**, **LangChain**, **RAG** |
 
 ## Features
 
@@ -82,26 +85,3 @@ legalens/
    npm run dev
    ```
    App: `http://localhost:5173`. With default Vite proxy, `/api` goes to the backend.
-
-### Environment links
-
-- **CORS:** Backend `CORS_ORIGINS` must include the frontend origin (e.g. `http://localhost:5173` or your Vercel URL).
-- **API URL:** Frontend `VITE_API_URL` must point at the backend base URL including `/api` in production (e.g. `https://your-api.run.app/api`). Leave empty for local dev if using Vite proxy.
-
-See `backend/.env-example` and `frontend/.env-example` for all variables; backend deployment is documented in `backend/DEPLOY_GCP.md`.
-
-## API overview
-
-| Area | Prefix | Description |
-|------|--------|-------------|
-| Auth | `/api/auth` | `GET /me` (current user from Auth0 JWT) |
-| Documents | `/api/documents` | Upload, list, stats, signed URL, analyze (streaming SSE), delete |
-| Agents | `/api/agents` | Upload (stateless), analyze, result, negotiate, edited-text, qa, history |
-| Voice | `/api/voice` | TTS, session creation, turn (requires `X-API-Key`) |
-| Services | `/api/services` | Parse PDF (no storage) |
-
-Document flow: upload → `/documents/analyze` or `/agents/analyze/{session_id}` streams validator → extractor → analyst → summarizer; then use `/negotiate`, `/qa`, or voice for negotiation and Q&A.
-
-## License
-
-Proprietary. All rights reserved.

@@ -32,18 +32,7 @@ export default function Layout({ children }) {
             <header className="sticky top-0 z-50 bg-[#17282E] text-[#EBE6E3] border-b-4 border-[#4F3D35] shadow-[0_4px_0_0_#604B42] px-6 py-4">
                 <div className="flex items-center justify-between">
                     <Link to="/" className="flex items-center gap-3 cursor-pointer group">
-                        <div className="w-10 h-10 pixel-card bg-[#17282E] flex items-center justify-center text-[#EBE6E3] group-hover:translate-y-[1px] transition-transform">
-                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-6 h-6">
-                                <path
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                    d="M12 3v4m0 0-4 6h8l-4-6m-6 7.5L4 18h4l-2-3.5zm12 0L18 18h4l-2-3.5M5 18h14M9 21h6"
-                                />
-                            </svg>
-                        </div>
-                        <h1 className="text-xl font-semibold tracking-tight text-[#EBE6E3]">
-                            LegaLens
-                        </h1>
+                        <img src="/logo.png" alt="Logo" className="h-10 w-auto object-contain group-hover:opacity-90 transition-opacity" />
                     </Link>
 
                     <nav className="hidden md:flex items-center gap-6 text-sm font-medium absolute left-1/2 -translate-x-1/2">
