@@ -155,6 +155,87 @@ async def get_live_canadian_law(
     return context
 
 
+_HIGH_KEYWORDS = [
+    "all remaining rent", "entire lease term", "non-refundable", "nonnrefundable",
+    "at any time without notice", "regardless of fault", "regardless of the outcome",
+    "pay all legal fees", "vacate immediately", "at landlord's discretion",
+    "without notice", "waive all rights", "forfeit", "solely responsible",
+    "all repairs", "all costs", "non-negotiable", "irrevocable",
+    "any time for any reason", "six months of additional rent",
+    "regardless of the condition", "may be increased at",
+    "structural issues", "regardless of property condition",
+]
+
+_MEDIUM_KEYWORDS = [
+    "automatic renewal", "automatically renews", "180 days",
+    "mandatory fee", "mandatory cleaning", "may increase rent",
+    "at any time", "24 hours", "penalty", "liquidated damages",
+    "three months' rent", "written cancellation", "early termination",
+]
+
+
+def _heuristic_severity(raw_text: str) -> str:
+    """Keyword-based fallback when the LLM analyst is unavailable."""
+    lower = raw_text.lower()
+    for kw in _HIGH_KEYWORDS:
+        if kw in lower:
+            return "HIGH"
+    for kw in _MEDIUM_KEYWORDS:
+        if kw in lower:
+            return "MEDIUM"
+    return "LOW"
+
+
+_REQUIRED_FIELDS = [
+    "id", "type", "raw_text", "location", "severity",
+    "severity_reason", "plain_english", "canadian_law",
+    "baseline_comparison", "negotiation_tip",
+]
+
+_LOCATION_EXTRA = ("line_start", "line_end", "char_start", "char_end", "page_start", "page_end")
+
+BATCH_SIZE = 4
+
+
+def _parse_analyst_response(
+    raw: str,
+    clause_index: Dict[str, Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    """Parse the LLM JSON response and merge location data from the extractor."""
+    raw = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw)
+    results = []
+    for item in json.loads(raw):
+        if not all(k in item for k in _REQUIRED_FIELDS):
+            continue
+        merged: Dict[str, Any] = {k: item[k] for k in _REQUIRED_FIELDS}
+        original = clause_index.get(merged["id"])
+        if isinstance(original, dict):
+            for extra_key in _LOCATION_EXTRA:
+                if extra_key in original and extra_key not in merged:
+                    merged[extra_key] = original[extra_key]
+        results.append(merged)
+    return results
+
+
+def _heuristic_fallback(clause: Dict[str, Any]) -> Dict[str, Any]:
+    """Build a best-effort analysis entry using keyword heuristics."""
+    sev = _heuristic_severity(clause.get("raw_text", ""))
+    reason_map = {
+        "HIGH": "Flagged by keyword analysis — contains language commonly found in predatory clauses.",
+        "MEDIUM": "Flagged by keyword analysis — contains unusual or restrictive language.",
+        "LOW": "Standard clause — no concerning language detected by keyword analysis.",
+    }
+    return {
+        **clause,
+        "severity": sev,
+        "severity_reason": reason_map[sev],
+        "plain_english": "Automated LLM analysis was unavailable; severity estimated from clause wording.",
+        "canadian_law": "N/A (LLM unavailable — review manually)",
+        "baseline_comparison": "N/A (LLM unavailable)",
+        "negotiation_tip": "Have a legal professional review this clause." if sev != "LOW" else "Looks standard.",
+    }
+
+
 async def run_analyst(
     clauses: List[Dict[str, Any]],
     document_name: str,
@@ -167,60 +248,42 @@ async def run_analyst(
 
     canadian_law_context = await get_live_canadian_law(clauses, thread_id)
 
-    all_analyzed: List[Dict[str, Any]] = []
     clause_index: Dict[str, Dict[str, Any]] = {
         c["id"]: c for c in clauses if isinstance(c, dict) and "id" in c
     }
-    # Single analysis call over all clauses instead of batching.
-    prompt = ANALYST_PROMPT.format(
-        document_name=document_name,
-        document_type=document_type,
-        canadian_law=canadian_law_context,
-        clauses_json=json.dumps(clauses, indent=2),
-    )
-    try:
-        raw = await call_llm(analyst_llm(), prompt)
-        raw = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw)
-        required = [
-            "id",
-            "type",
-            "raw_text",
-            "location",
-            "severity",
-            "severity_reason",
-            "plain_english",
-            "canadian_law",
-            "baseline_comparison",
-            "negotiation_tip",
-        ]
-        for item in json.loads(raw):
-            if not all(k in item for k in required):
-                continue
-            merged: Dict[str, Any] = {k: item[k] for k in required}
 
-            # Carry through source-text location info from extractor so the
-            # frontend can highlight issues directly on the original PDF.
-            original = clause_index.get(merged["id"])
-            if isinstance(original, dict):
-                for extra_key in ("line_start", "line_end", "char_start", "char_end", "page_start", "page_end"):
-                    if extra_key in original and extra_key not in merged:
-                        merged[extra_key] = original[extra_key]
+    all_analyzed: List[Dict[str, Any]] = []
+    analyzed_ids: set = set()
 
-            all_analyzed.append(merged)
-    except Exception as e:
-        print(f"  -> Analyst error: {e}")
-        for clause in clauses:
-            all_analyzed.append(
-                {
-                    **clause,
-                    "severity": "UNKNOWN",
-                    "severity_reason": "Analysis failed for this clause.",
-                    "plain_english": "N/A",
-                    "canadian_law": "N/A",
-                    "baseline_comparison": "N/A",
-                    "negotiation_tip": "N/A",
-                }
-            )
+    batches = [clauses[i:i + BATCH_SIZE] for i in range(0, len(clauses), BATCH_SIZE)]
+
+    for batch_num, batch in enumerate(batches, 1):
+        prompt = ANALYST_PROMPT.format(
+            document_name=document_name,
+            document_type=document_type,
+            canadian_law=canadian_law_context,
+            clauses_json=json.dumps(batch, indent=2),
+        )
+        try:
+            raw = await call_llm(analyst_llm(), prompt)
+            parsed = _parse_analyst_response(raw, clause_index)
+            for item in parsed:
+                all_analyzed.append(item)
+                analyzed_ids.add(item["id"])
+            print(f"  -> Batch {batch_num}/{len(batches)}: analysed {len(parsed)} clauses via LLM")
+        except Exception as e:
+            print(f"  -> Batch {batch_num}/{len(batches)} LLM failed ({e}), using heuristic fallback")
+            for clause in batch:
+                if clause.get("id") not in analyzed_ids:
+                    all_analyzed.append(_heuristic_fallback(clause))
+                    analyzed_ids.add(clause.get("id"))
+
+        if batch_num < len(batches):
+            await asyncio.sleep(2)
+
+    for clause in clauses:
+        if clause.get("id") not in analyzed_ids:
+            all_analyzed.append(_heuristic_fallback(clause))
 
     all_analyzed.sort(
         key=lambda c: {"HIGH": 0, "MEDIUM": 1, "LOW": 2}.get(c.get("severity", ""), 3)
