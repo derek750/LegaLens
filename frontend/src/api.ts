@@ -211,11 +211,11 @@ type VoiceSessionResponse = {
 };
 
 const voiceApiKey = () => {
-  const key = import.meta.env.VITE_VOICE_AGENT_API_KEY;
-  if (!key) {
-    throw new Error("VITE_VOICE_AGENT_API_KEY is not configured in the frontend.");
-  }
-  return key;
+  const key =
+    (typeof import.meta !== "undefined" && (import.meta as { env?: Record<string, string> }).env?.VITE_VOICE_AGENT_API_KEY) ||
+    "";
+  // Match backend default so dev works without frontend env
+  return key || "dev-voice-agent-key";
 };
 
 export async function createVoiceSession(): Promise<VoiceSessionResponse> {
@@ -276,4 +276,28 @@ export async function voiceThink(params: {
   }
 
   return data as { answer: string };
+}
+
+export async function addContextDocumentToVoiceThread(params: {
+  thread_id: string;
+  bucket_path: string;
+}): Promise<{ document_name: string; document_type: string; clause_count: number }> {
+  const res = await apiFetch("/voice/context/document", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-API-Key": voiceApiKey(),
+    },
+    body: JSON.stringify({
+      thread_id: params.thread_id,
+      bucket_path: params.bucket_path,
+    }),
+  });
+
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.detail || "Failed to add document context to voice thread");
+  }
+
+  return data as { document_name: string; document_type: string; clause_count: number };
 }
