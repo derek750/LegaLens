@@ -1,4 +1,4 @@
-import React, { useEffect, useCallback, useRef } from 'react';
+import React, { useEffect, useCallback, useRef, useState } from 'react';
 import { Conversation } from '@elevenlabs/client';
 import Layout from '../components/Layout';
 import { useApp } from '../context/AppContext';
@@ -27,6 +27,7 @@ export default function ConsultantPage() {
         hotwordRecognizerRef, addConsultantTurnRef,
     } = useApp();
 
+    const [contextLoading, setContextLoading] = useState(false);
     const ttsAudioRef = useRef(null);
 
     const speakText = useCallback(async (text) => {
@@ -254,6 +255,7 @@ export default function ConsultantPage() {
                                 </label>
                                 <select
                                     value={consultantSelectedDocId}
+                                    disabled={contextLoading}
                                     onChange={async (e) => {
                                         const value = e.target.value;
                                         setConsultantSelectedDocId(value);
@@ -263,6 +265,7 @@ export default function ConsultantPage() {
                                             setVoiceError('Could not load context document.');
                                             return;
                                         }
+                                        setContextLoading(true);
                                         let threadId = voiceBackboardThreadIdRef.current;
                                         try {
                                             if (!threadId) {
@@ -273,15 +276,20 @@ export default function ConsultantPage() {
                                             await addContextDocumentToVoiceThread({ thread_id: threadId, bucket_path: selectedDoc.bucket_path });
                                         } catch (err) {
                                             setVoiceError(err?.message || 'Failed to add document context.');
+                                        } finally {
+                                            setContextLoading(false);
                                         }
                                     }}
-                                    className="pixel-input w-full px-3 py-2 bg-[#F5F0EC] text-sm text-[#17282E]"
+                                    className={`pixel-input w-full px-3 py-2 bg-[#F5F0EC] text-sm text-[#17282E] ${contextLoading ? 'opacity-60 cursor-not-allowed' : ''}`}
                                 >
                                     <option value="none">{`No document \u2013 general legal question`}</option>
                                     {documents.map((doc) => (
                                         <option key={doc.id} value={doc.id}>{doc.filename}</option>
                                     ))}
                                 </select>
+                                {contextLoading && (
+                                    <p className="text-[10px] text-[#604B42] mt-1 animate-pulse">Extracting document context\u2026</p>
+                                )}
                             </div>
                         </div>
 
