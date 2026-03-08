@@ -1,6 +1,7 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, useNavigate } from 'react-router-dom';
 import { Auth0Provider } from '@auth0/auth0-react';
+import { Analytics } from '@vercel/analytics/react';
 import { AppProvider } from './context/AppContext';
 import Home from './pages/Home';
 import Documents from './pages/Documents';
@@ -41,6 +42,7 @@ function App() {
             {/* Legacy redirect */}
             <Route path="/dashboard" element={<Documents />} />
           </Routes>
+          <Analytics />
         </AppProvider>
       </Auth0ProviderWithCallback>
     </BrowserRouter>

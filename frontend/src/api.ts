@@ -1,4 +1,5 @@
-const API_BASE = "/api";
+const API_BASE =
+  (typeof import.meta !== "undefined" && (import.meta as { env?: Record<string, string> }).env?.VITE_API_URL) || "/api";
 
 let _getAccessToken: (() => Promise<string>) | null = null;
 
