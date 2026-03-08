@@ -7,7 +7,7 @@ import PdfHighlightViewer from '../components/PdfHighlightViewer';
 import { listDocuments, getDocumentUrl, analyzeStoredDocument, createVoiceSession, createBackboardThread, voiceThink, addContextDocumentToVoiceThread, negotiateDocument } from '../api.ts';
 
 function formatBytes(bytes) {
-    if (!bytes) return '—';
+    if (!bytes) return '\u2014';
     if (bytes < 1024) return `${bytes} B`;
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
@@ -133,8 +133,6 @@ export default function Dashboard() {
                     // eslint-disable-next-line no-console
                     console.log('[hotword] detected phrase in transcript:', transcript);
                     if (!voiceConversationRef.current && voiceStatus !== 'connecting') {
-                        // Start the ElevenLabs conversation (same as clicking the button)
-                        // Ignore the promise so we don't block recognition loop
                         // eslint-disable-next-line @typescript-eslint/no-floating-promises
                         handleToggleVoice();
                     }
@@ -148,7 +146,6 @@ export default function Dashboard() {
             setHotwordListening(false);
         };
         recognition.onend = () => {
-            // Auto-restart while listening on the Consultant tab
             if (hotwordListening && activeTab === 'consultant') {
                 try {
                     recognition.start();
@@ -177,7 +174,6 @@ export default function Dashboard() {
             }
             hotwordRecognizerRef.current = null;
         };
-        // We intentionally omit handleToggleVoice from deps; we only care about status + tab + toggle.
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [activeTab, hotwordListening, voiceStatus]);
 
@@ -209,9 +205,8 @@ export default function Dashboard() {
             setViewingId(null);
             setViewerLoading(false);
 
-            // Run pipeline: extract → analyze → summarize
             setAnalysisLoading(true);
-            setAnalysisProgress('Starting analysis…');
+            setAnalysisProgress('Starting analysis\u2026');
             try {
                 const result = await analyzeStoredDocument(doc.bucket_path, (ev) => {
                     if (ev.event === 'progress') setAnalysisProgress(ev.message || '');
@@ -241,7 +236,6 @@ export default function Dashboard() {
         try {
             const result = await negotiateDocument(analysisResult.session_id);
             setNegotiationResult(result);
-            setActiveTab('negotiate');
         } catch (err) {
             setNegotiationError(err.message || 'Negotiation failed');
         } finally {
@@ -287,7 +281,7 @@ export default function Dashboard() {
             const assistantMessage = {
                 id: `${Date.now()}-assistant`,
                 role: 'assistant',
-                text: answer || 'I couldn’t get an answer for that.',
+                text: answer || "I couldn\u2019t get an answer for that.",
                 createdAt: new Date().toISOString(),
             };
             setConsultantMessages((prev) => [...prev, assistantMessage]);
@@ -324,7 +318,6 @@ export default function Dashboard() {
             setVoiceError('');
             setVoiceStatus('connecting');
 
-            // Ensure we have a Backboard thread for this voice session; reuse if context was added earlier.
             let threadId = voiceBackboardThreadIdRef.current;
             if (!threadId) {
                 let backboard;
@@ -359,7 +352,6 @@ export default function Dashboard() {
                     voiceConversationRef.current = null;
                     setAssistantSpeaking(false);
                 },
-                // Backboard + Gemini thinking: agent must have a tool "get_legal_answer" with param "query" in the ElevenLabs dashboard, "Wait for response" enabled, and agent prompt must say to USE this tool for legal questions (e.g. "When the user asks a legal question, call get_legal_answer with their question").
                 clientTools: {
                     get_legal_answer: async ({ query }) => {
                         const q = typeof query === 'string' ? query : String(query ?? '');
@@ -371,7 +363,7 @@ export default function Dashboard() {
                                 user_utterance: q,
                                 session_id: null,
                             });
-                            const text = answer || 'I couldn’t get an answer for that.';
+                            const text = answer || "I couldn\u2019t get an answer for that.";
                             addConsultantTurnRef.current?.(q, text);
                             return text;
                         } catch (err) {
@@ -392,6 +384,10 @@ export default function Dashboard() {
             setAssistantSpeaking(false);
         }
     };
+
+    const hasBadClauses = analysisResult?.analyzed_clauses?.some(
+        (c) => c.severity === 'HIGH' || c.severity === 'MEDIUM' || c.severity === 'UNKNOWN'
+    );
 
     return (
         <Layout>
@@ -442,29 +438,6 @@ export default function Dashboard() {
                         </button>
                         <button
                             type="button"
-                            onClick={() => analysisResult && setActiveTab('negotiate')}
-                            disabled={!analysisResult}
-                            className={`pb-2 border-b-2 transition-colors ${
-                                activeTab === 'negotiate'
-                                    ? 'border-[#17282E] text-[#17282E]'
-                                    : 'border-transparent text-[#604B42]/50 hover:text-[#17282E]'
-                            } ${!analysisResult ? 'opacity-40 cursor-not-allowed' : ''}`}
-                        >
-                            Negotiate
-                        </button>
-                        <button
-                            type="button"
-                            onClick={() => setActiveTab('simulate')}
-                            className={`pb-2 border-b-2 transition-colors ${
-                                activeTab === 'simulate'
-                                    ? 'border-[#17282E] text-[#17282E]'
-                                    : 'border-transparent text-[#604B42]/70 hover:text-[#17282E]'
-                            }`}
-                        >
-                            Simulate
-                        </button>
-                        <button
-                            type="button"
                             onClick={() => setActiveTab('consultant')}
                             className={`pb-2 border-b-2 transition-colors ${
                                 activeTab === 'consultant'
@@ -498,7 +471,7 @@ export default function Dashboard() {
                                     <div className="w-6 h-6 bg-[#F8C7C8] ring-2 ring-[#604B42]/30" />
                                     <div>
                                         <p className="text-sm font-medium text-[#604B42]">Clauses flagged</p>
-                                        <h4 className="text-2xl font-semibold text-[#17282E]">—</h4>
+                                        <h4 className="text-2xl font-semibold text-[#17282E]">{'\u2014'}</h4>
                                     </div>
                                 </div>
                             </div>
@@ -509,7 +482,7 @@ export default function Dashboard() {
                                     <div className="w-6 h-6 bg-[#C9E8D7] ring-2 ring-[#604B42]/30" />
                                     <div>
                                         <p className="text-sm font-medium text-[#604B42]">Clean documents</p>
-                                        <h4 className="text-2xl font-semibold text-[#17282E]">—</h4>
+                                        <h4 className="text-2xl font-semibold text-[#17282E]">{'\u2014'}</h4>
                                     </div>
                                 </div>
                             </div>
@@ -530,7 +503,7 @@ export default function Dashboard() {
                                     </thead>
                                     <tbody className="divide-y divide-[#F5F0EC]">
                                         {loading && (
-                                            <tr><td colSpan="4" className="py-12 text-center text-slate-400">Loading…</td></tr>
+                                            <tr><td colSpan="4" className="py-12 text-center text-slate-400">{`Loading\u2026`}</td></tr>
                                         )}
                                         {error && (
                                             <tr><td colSpan="4" className="py-12 text-center text-red-500">{error}</td></tr>
@@ -555,7 +528,7 @@ export default function Dashboard() {
                                                     </div>
                                                 </td>
                                                 <td className="py-4 px-6 text-[#604B42] text-sm">
-                                                    {doc.created_at ? new Date(doc.created_at).toLocaleDateString() : '—'}
+                                                    {doc.created_at ? new Date(doc.created_at).toLocaleDateString() : '\u2014'}
                                                 </td>
                                                 <td className="py-4 px-6 text-[#604B42] text-sm">
                                                     {formatBytes(doc.size_bytes)}
@@ -571,7 +544,7 @@ export default function Dashboard() {
                                                             className="text-xs font-medium text-[#17282E] hover:text-[#604B42] underline-offset-2 hover:underline disabled:opacity-60"
                                                             disabled={viewingId === doc.id}
                                                         >
-                                                            {viewingId === doc.id ? 'Opening…' : 'View'}
+                                                            {viewingId === doc.id ? 'Opening\u2026' : 'View'}
                                                         </button>
                                                     </div>
                                                 </td>
@@ -596,7 +569,7 @@ export default function Dashboard() {
                     </>
                 )}
 
-                {/* Viewer tab — PDF with clause highlights */}
+                {/* Viewer tab */}
                 {activeTab === 'viewer' && (
                     <div className="relative">
                         <div className="absolute inset-0 translate-x-[4px] translate-y-[4px] bg-[#17282E]/25" />
@@ -621,7 +594,7 @@ export default function Dashboard() {
                                                 Uploaded:{' '}
                                                 {viewerDoc.created_at
                                                     ? new Date(viewerDoc.created_at).toLocaleString()
-                                                    : '—'}
+                                                    : '\u2014'}
                                             </p>
                                             <p>Size: {formatBytes(viewerDoc.size_bytes)}</p>
                                         </div>
@@ -637,7 +610,7 @@ export default function Dashboard() {
                                                 />
                                             ) : (
                                                 <div className="w-full h-full flex items-center justify-center text-sm text-[#604B42] px-6 text-center">
-                                                    Loading document…
+                                                    {`Loading document\u2026`}
                                                 </div>
                                             )}
                                         </div>
@@ -647,7 +620,7 @@ export default function Dashboard() {
                                                 Analysis
                                             </p>
                                             {analysisLoading && (
-                                                <p className="text-[#604B42] animate-pulse">{analysisProgress || 'Running pipeline…'}</p>
+                                                <p className="text-[#604B42] animate-pulse">{analysisProgress || 'Running pipeline\u2026'}</p>
                                             )}
                                             {analysisError && (
                                                 <p className="text-red-600">{analysisError}</p>
@@ -667,7 +640,7 @@ export default function Dashboard() {
                                                         }>
                                                             {analysisResult.overall_risk_score}
                                                         </span>
-                                                        {' · '}{analysisResult.clause_count} clauses
+                                                        {' \u00b7 '}{analysisResult.clause_count} clauses
                                                     </p>
 
                                                     {analysisResult.analyzed_clauses?.filter(c => c.severity === 'HIGH' || c.severity === 'MEDIUM' || c.severity === 'UNKNOWN').length > 0 && (
@@ -695,7 +668,7 @@ export default function Dashboard() {
                                                                                     : 'text-gray-500'
                                                                                 }`}>
                                                                                     {clause.severity === 'UNKNOWN' ? 'NEEDS REVIEW' : clause.severity}
-                                                                                    {clause.page_start ? ` · p.${clause.page_start}` : ''}
+                                                                                    {clause.page_start ? ` \u00b7 p.${clause.page_start}` : ''}
                                                                                 </span>
                                                                             </div>
                                                                             {clause.plain_english && clause.plain_english !== 'N/A' && <p className="text-[11px] text-[#604B42] mb-1">{clause.plain_english}</p>}
@@ -719,6 +692,27 @@ export default function Dashboard() {
                                                             </ul>
                                                         </div>
                                                     )}
+
+                                                    {/* Negotiate button: only when bad clauses are found */}
+                                                    {hasBadClauses && (
+                                                        <div className="border-t border-[#604B42]/20 pt-3">
+                                                            <button
+                                                                type="button"
+                                                                onClick={handleNegotiate}
+                                                                disabled={negotiationLoading}
+                                                                className="w-full px-4 py-2 pixel-button text-xs font-semibold bg-[#17282E] text-[#EBE6E3] hover:bg-[#17282E]/90 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                                                            >
+                                                                {negotiationLoading
+                                                                    ? 'Building strategy\u2026'
+                                                                    : negotiationResult
+                                                                        ? 'Regenerate Negotiation'
+                                                                        : 'Generate Negotiation Strategy'}
+                                                            </button>
+                                                            {negotiationError && (
+                                                                <p className="text-[10px] text-red-600 mt-1">{negotiationError}</p>
+                                                            )}
+                                                        </div>
+                                                    )}
                                                 </div>
                                             )}
                                             {!analysisResult && !analysisLoading && !analysisError && (
@@ -726,6 +720,105 @@ export default function Dashboard() {
                                             )}
                                         </div>
                                     </div>
+
+                                    {/* Negotiation results inline */}
+                                    {negotiationLoading && (
+                                        <div className="flex items-center justify-center py-12 mt-6">
+                                            <div className="text-center">
+                                                <div className="inline-block w-8 h-8 border-2 border-[#604B42]/30 border-t-[#17282E] rounded-full animate-spin mb-3" />
+                                                <p className="text-sm text-[#604B42] animate-pulse">{`Building negotiation strategy\u2026`}</p>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {negotiationResult && (
+                                        <div className="mt-6 border border-[#604B42]/25 bg-[#F5F0EC]/50 p-6 space-y-6">
+                                            <div className="flex items-center justify-between">
+                                                <div>
+                                                    <h4 className="text-lg font-semibold text-[#17282E]">Negotiation Strategy</h4>
+                                                    <p className="text-xs text-[#604B42] mt-0.5">Bad clauses rewritten into fair alternatives you can propose.</p>
+                                                </div>
+                                                <button
+                                                    type="button"
+                                                    onClick={handleNegotiate}
+                                                    disabled={negotiationLoading}
+                                                    className="px-4 py-1.5 text-xs font-medium border border-[#604B42]/30 text-[#604B42] hover:bg-[#F5F0EC] transition-colors rounded disabled:opacity-60"
+                                                >
+                                                    Regenerate
+                                                </button>
+                                            </div>
+
+                                            <div className="flex gap-4 text-xs font-medium">
+                                                <span className="px-2.5 py-1 bg-red-100 text-red-700 rounded">
+                                                    Must Fight: {negotiationResult.must_fight.length}
+                                                </span>
+                                                <span className="px-2.5 py-1 bg-amber-100 text-amber-700 rounded">
+                                                    Should Push Back: {negotiationResult.should_push.length}
+                                                </span>
+                                                <span className="px-2.5 py-1 bg-gray-100 text-gray-600 rounded">
+                                                    Accept If Needed: {negotiationResult.accept_if_needed.length}
+                                                </span>
+                                            </div>
+
+                                            {[
+                                                { label: 'Must Fight', items: negotiationResult.must_fight, borderColor: 'border-red-400', bgColor: 'bg-red-50', badgeColor: 'bg-red-500', textColor: 'text-red-700' },
+                                                { label: 'Should Push Back', items: negotiationResult.should_push, borderColor: 'border-amber-400', bgColor: 'bg-amber-50', badgeColor: 'bg-amber-400', textColor: 'text-amber-700' },
+                                                { label: 'Accept If Needed', items: negotiationResult.accept_if_needed, borderColor: 'border-gray-300', bgColor: 'bg-gray-50', badgeColor: 'bg-gray-400', textColor: 'text-gray-600' },
+                                            ].filter(g => g.items.length > 0).map(group => (
+                                                <div key={group.label}>
+                                                    <div className="flex items-center gap-2 mb-3">
+                                                        <span className={`w-2.5 h-2.5 rounded-full ${group.badgeColor}`} />
+                                                        <h4 className={`text-sm font-semibold ${group.textColor}`}>{group.label}</h4>
+                                                    </div>
+                                                    <div className="space-y-4">
+                                                        {group.items.map(clause => (
+                                                            <div key={clause.id} className={`border ${group.borderColor} rounded-lg overflow-hidden`}>
+                                                                <div className={`px-4 py-2.5 ${group.bgColor} border-b ${group.borderColor}`}>
+                                                                    <div className="flex items-center justify-between">
+                                                                        <span className="text-sm font-semibold text-[#17282E]">{clause.type}</span>
+                                                                        <span className={`text-[10px] font-bold ${group.textColor}`}>{clause.severity}</span>
+                                                                    </div>
+                                                                </div>
+                                                                <div className="p-4 space-y-4">
+                                                                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                                                                        <div>
+                                                                            <p className="text-[10px] uppercase font-bold text-red-500 mb-1.5 tracking-wider">Original (Problematic)</p>
+                                                                            <div className="text-xs text-[#604B42] bg-red-50/60 border border-red-200 rounded p-3 leading-relaxed">
+                                                                                {clause.original_text}
+                                                                            </div>
+                                                                        </div>
+                                                                        <div>
+                                                                            <p className="text-[10px] uppercase font-bold text-emerald-600 mb-1.5 tracking-wider">Rewritten (Fair)</p>
+                                                                            <div className="text-xs text-[#17282E] bg-emerald-50/60 border border-emerald-200 rounded p-3 leading-relaxed">
+                                                                                {clause.rewritten_clause}
+                                                                            </div>
+                                                                        </div>
+                                                                    </div>
+
+                                                                    <div className="border-t border-[#604B42]/10 pt-3 space-y-2.5">
+                                                                        <div>
+                                                                            <p className="text-[10px] uppercase font-bold text-[#604B42]/60 mb-1 tracking-wider">What to Say</p>
+                                                                            <p className="text-xs text-[#17282E] italic leading-relaxed">&ldquo;{clause.negotiation_script}&rdquo;</p>
+                                                                        </div>
+                                                                        <div className="flex flex-col sm:flex-row gap-3">
+                                                                            <div className="flex-1">
+                                                                                <p className="text-[10px] uppercase font-bold text-[#604B42]/60 mb-1 tracking-wider">Your Leverage</p>
+                                                                                <p className="text-xs text-[#604B42]">{clause.leverage}</p>
+                                                                            </div>
+                                                                            <div className="flex-1">
+                                                                                <p className="text-[10px] uppercase font-bold text-[#604B42]/60 mb-1 tracking-wider">Fallback Position</p>
+                                                                                <p className="text-xs text-[#604B42]">{clause.fallback_position}</p>
+                                                                            </div>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
                                 </>
                             ) : (
                                 <div className="text-sm text-[#604B42]">
@@ -733,163 +826,6 @@ export default function Dashboard() {
                                     <span className="font-semibold text-[#17282E]"> Overview</span> tab to open it here inside the app.
                                 </div>
                             )}
-                        </div>
-                    </div>
-                )}
-
-                {/* Negotiate tab */}
-                {activeTab === 'negotiate' && (
-                    <div className="relative">
-                        <div className="absolute inset-0 translate-x-[4px] translate-y-[4px] bg-[#17282E]/25" />
-                        <div className="relative glass-panel border border-[#604B42]/25 p-6">
-                            <div className="flex items-center justify-between mb-4">
-                                <div>
-                                    <h3 className="text-xl font-semibold text-[#17282E]">Negotiation Strategy</h3>
-                                    <p className="text-sm text-[#604B42] mt-1">
-                                        Bad clauses rewritten into fair alternatives you can propose.
-                                    </p>
-                                </div>
-                                {!negotiationResult && !negotiationLoading && (
-                                    <button
-                                        type="button"
-                                        onClick={handleNegotiate}
-                                        disabled={!analysisResult}
-                                        className="px-5 py-2 pixel-button text-sm font-medium bg-[#17282E] text-[#EBE6E3] hover:bg-[#17282E]/90 transition-colors disabled:opacity-40"
-                                    >
-                                        Generate Negotiation
-                                    </button>
-                                )}
-                                {negotiationResult && (
-                                    <button
-                                        type="button"
-                                        onClick={handleNegotiate}
-                                        className="px-4 py-1.5 text-xs font-medium border border-[#604B42]/30 text-[#604B42] hover:bg-[#F5F0EC] transition-colors rounded"
-                                    >
-                                        Regenerate
-                                    </button>
-                                )}
-                            </div>
-
-                            {negotiationLoading && (
-                                <div className="flex items-center justify-center py-16">
-                                    <div className="text-center">
-                                        <div className="inline-block w-8 h-8 border-2 border-[#604B42]/30 border-t-[#17282E] rounded-full animate-spin mb-3" />
-                                        <p className="text-sm text-[#604B42] animate-pulse">Building negotiation strategy…</p>
-                                    </div>
-                                </div>
-                            )}
-
-                            {negotiationError && (
-                                <p className="text-sm text-red-600 mb-4">{negotiationError}</p>
-                            )}
-
-                            {negotiationResult && (
-                                <div className="space-y-6">
-                                    <div className="flex gap-4 text-xs font-medium">
-                                        <span className="px-2.5 py-1 bg-red-100 text-red-700 rounded">
-                                            Must Fight: {negotiationResult.must_fight.length}
-                                        </span>
-                                        <span className="px-2.5 py-1 bg-amber-100 text-amber-700 rounded">
-                                            Should Push Back: {negotiationResult.should_push.length}
-                                        </span>
-                                        <span className="px-2.5 py-1 bg-gray-100 text-gray-600 rounded">
-                                            Accept If Needed: {negotiationResult.accept_if_needed.length}
-                                        </span>
-                                    </div>
-
-                                    {[
-                                        { label: 'Must Fight', items: negotiationResult.must_fight, borderColor: 'border-red-400', bgColor: 'bg-red-50', badgeColor: 'bg-red-500', textColor: 'text-red-700' },
-                                        { label: 'Should Push Back', items: negotiationResult.should_push, borderColor: 'border-amber-400', bgColor: 'bg-amber-50', badgeColor: 'bg-amber-400', textColor: 'text-amber-700' },
-                                        { label: 'Accept If Needed', items: negotiationResult.accept_if_needed, borderColor: 'border-gray-300', bgColor: 'bg-gray-50', badgeColor: 'bg-gray-400', textColor: 'text-gray-600' },
-                                    ].filter(g => g.items.length > 0).map(group => (
-                                        <div key={group.label}>
-                                            <div className="flex items-center gap-2 mb-3">
-                                                <span className={`w-2.5 h-2.5 rounded-full ${group.badgeColor}`} />
-                                                <h4 className={`text-sm font-semibold ${group.textColor}`}>{group.label}</h4>
-                                            </div>
-                                            <div className="space-y-4">
-                                                {group.items.map(clause => (
-                                                    <div key={clause.id} className={`border ${group.borderColor} rounded-lg overflow-hidden`}>
-                                                        <div className={`px-4 py-2.5 ${group.bgColor} border-b ${group.borderColor}`}>
-                                                            <div className="flex items-center justify-between">
-                                                                <span className="text-sm font-semibold text-[#17282E]">{clause.type}</span>
-                                                                <span className={`text-[10px] font-bold ${group.textColor}`}>{clause.severity}</span>
-                                                            </div>
-                                                        </div>
-                                                        <div className="p-4 space-y-4">
-                                                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                                                                <div>
-                                                                    <p className="text-[10px] uppercase font-bold text-red-500 mb-1.5 tracking-wider">Original (Problematic)</p>
-                                                                    <div className="text-xs text-[#604B42] bg-red-50/60 border border-red-200 rounded p-3 leading-relaxed">
-                                                                        {clause.original_text}
-                                                                    </div>
-                                                                </div>
-                                                                <div>
-                                                                    <p className="text-[10px] uppercase font-bold text-emerald-600 mb-1.5 tracking-wider">Rewritten (Fair)</p>
-                                                                    <div className="text-xs text-[#17282E] bg-emerald-50/60 border border-emerald-200 rounded p-3 leading-relaxed">
-                                                                        {clause.rewritten_clause}
-                                                                    </div>
-                                                                </div>
-                                                            </div>
-
-                                                            <div className="border-t border-[#604B42]/10 pt-3 space-y-2.5">
-                                                                <div>
-                                                                    <p className="text-[10px] uppercase font-bold text-[#604B42]/60 mb-1 tracking-wider">What to Say</p>
-                                                                    <p className="text-xs text-[#17282E] italic leading-relaxed">"{clause.negotiation_script}"</p>
-                                                                </div>
-                                                                <div className="flex flex-col sm:flex-row gap-3">
-                                                                    <div className="flex-1">
-                                                                        <p className="text-[10px] uppercase font-bold text-[#604B42]/60 mb-1 tracking-wider">Your Leverage</p>
-                                                                        <p className="text-xs text-[#604B42]">{clause.leverage}</p>
-                                                                    </div>
-                                                                    <div className="flex-1">
-                                                                        <p className="text-[10px] uppercase font-bold text-[#604B42]/60 mb-1 tracking-wider">Fallback Position</p>
-                                                                        <p className="text-xs text-[#604B42]">{clause.fallback_position}</p>
-                                                                    </div>
-                                                                </div>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
-
-                            {!negotiationResult && !negotiationLoading && !negotiationError && (
-                                <div className="border border-dashed border-[#604B42]/30 p-10 flex flex-col items-center justify-center gap-3 bg-[#F5F0EC]/60">
-                                    <p className="text-sm text-[#604B42] text-center max-w-md">
-                                        Click <strong>Generate Negotiation</strong> to create fair rewrites of every flagged clause,
-                                        along with what to say, your leverage, and fallback positions.
-                                    </p>
-                                </div>
-                            )}
-                        </div>
-                    </div>
-                )}
-
-                {/* Simulate tab (placeholder) */}
-                {activeTab === 'simulate' && (
-                    <div className="relative">
-                        <div className="absolute inset-0 translate-x-[4px] translate-y-[4px] bg-[#17282E]/25" />
-                        <div className="relative glass-panel border border-[#604B42]/25 p-8">
-                            <h3 className="text-xl font-semibold text-[#17282E] mb-2">Simulate outcomes</h3>
-                            <p className="text-sm text-[#604B42] mb-6 max-w-xl">
-                                Choose an agreement from your dashboard and preview possible scenarios if you sign as-is:
-                                financial impact, risk exposure, and negotiation levers.
-                            </p>
-                            <div className="border border-dashed border-[#604B42]/30 p-6 flex flex-col items-center justify-center gap-3 bg-[#F5F0EC]/60">
-                                <p className="text-sm text-[#604B42]">
-                                    Simulation UI coming soon. For now, this is a placeholder area where you’ll select a document and explore outcomes.
-                                </p>
-                                <button
-                                    type="button"
-                                    className="mt-2 px-4 py-2 pixel-button text-sm font-medium bg-[#17282E] text-[#EBE6E3] hover:bg-[#17282E] transition-colors"
-                                >
-                                    Select an agreement to simulate
-                                </button>
-                            </div>
                         </div>
                     </div>
                 )}
@@ -939,7 +875,7 @@ export default function Dashboard() {
                                         }}
                                         className="pixel-input w-full px-3 py-2 bg-[#F5F0EC] text-sm text-[#17282E]"
                                     >
-                                        <option value="none">No document – general legal question</option>
+                                        <option value="none">{`No document \u2013 general legal question`}</option>
                                         {documents.map((doc) => (
                                             <option key={doc.id} value={doc.id}>
                                                 {doc.filename}
@@ -972,7 +908,7 @@ export default function Dashboard() {
                                         <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
                                             {consultantMessages.length === 0 && (
                                                 <p className="text-xs text-[#604B42]/80 italic">
-                                                    Ask a question below or use voice. Your messages and the lawyer’s replies appear here.
+                                                    Ask a question below or use voice. Your messages and the lawyer's replies appear here.
                                                 </p>
                                             )}
 
@@ -1014,7 +950,7 @@ export default function Dashboard() {
                                             {voiceConversationRef.current
                                                 ? 'End voice conversation'
                                                 : voiceStatus === 'connecting'
-                                                    ? 'Starting…'
+                                                    ? 'Starting\u2026'
                                                     : 'Talk to your lawyer'}
                                         </button>
                                         <div className="flex-1 text-[11px] text-[#604B42]/90 space-y-1">
@@ -1065,7 +1001,7 @@ export default function Dashboard() {
                                                 type="text"
                                                 value={consultantInput}
                                                 onChange={(e) => setConsultantInput(e.target.value)}
-                                                placeholder="Ask about a clause, law, or negotiation angle…"
+                                                placeholder="Ask about a clause, law, or negotiation angle\u2026"
                                                 className="pixel-input w-full px-3 py-2 bg-[#F5F0EC] text-sm text-[#17282E]"
                                             />
                                         </div>
@@ -1074,7 +1010,7 @@ export default function Dashboard() {
                                             disabled={consultantSending || !consultantInput.trim()}
                                             className="px-4 py-2 pixel-button text-sm font-medium bg-[#17282E] text-[#EBE6E3] hover:bg-[#17282E] transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                                         >
-                                            {consultantSending ? 'Thinking…' : 'Send'}
+                                            {consultantSending ? 'Thinking\u2026' : 'Send'}
                                         </button>
                                     </form>
                                 </div>

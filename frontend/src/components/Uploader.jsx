@@ -2,6 +2,7 @@ import React, { useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { DocumentPlusIcon, DocumentTextIcon, CheckCircleIcon, ArrowPathIcon } from '@heroicons/react/24/outline';
 import { useAuth0 } from '@auth0/auth0-react';
+import { useNavigate } from 'react-router-dom';
 import { uploadDocument } from '../api.ts';
 
 const AnimatedHighlight = ({ text, highlightColor, delayOffset = 0 }) => (
@@ -26,11 +27,11 @@ const AnimatedHighlight = ({ text, highlightColor, delayOffset = 0 }) => (
 
 const Uploader = () => {
     const { isAuthenticated, loginWithRedirect } = useAuth0();
+    const navigate = useNavigate();
     const [file, setFile] = useState(null);
     const [isHovering, setIsHovering] = useState(false);
-    const [isScanning, setIsScanning] = useState(false);
-    const [simulatedProgress, setSimulatedProgress] = useState(0);
-    const [scanComplete, setScanComplete] = useState(false);
+    const [isUploading, setIsUploading] = useState(false);
+    const [uploadComplete, setUploadComplete] = useState(false);
     const [uploadError, setUploadError] = useState("");
     const fileInputRef = useRef(null);
 
@@ -62,42 +63,27 @@ const Uploader = () => {
         }
     };
 
-    const initiateScan = async () => {
+    const initiateUpload = async () => {
         setUploadError("");
         if (!isAuthenticated) {
-            setUploadError("Please log in to scan documents.");
+            setUploadError("Please log in to upload documents.");
             return;
         }
-        setIsScanning(true);
-        setSimulatedProgress(0);
+        setIsUploading(true);
 
         try {
             await uploadDocument(file);
+            setIsUploading(false);
+            setUploadComplete(true);
         } catch (err) {
-            setIsScanning(false);
+            setIsUploading(false);
             setUploadError(err.message);
-            return;
         }
-
-        const interval = setInterval(() => {
-            setSimulatedProgress(prev => {
-                if (prev >= 100) {
-                    clearInterval(interval);
-                    setTimeout(() => {
-                        setIsScanning(false);
-                        setScanComplete(true);
-                    }, 600);
-                    return 100;
-                }
-                return prev + Math.floor(Math.random() * 12) + 1;
-            });
-        }, 400);
     };
 
     const resetUploader = () => {
         setFile(null);
-        setScanComplete(false);
-        setSimulatedProgress(0);
+        setUploadComplete(false);
         setUploadError("");
     };
 
@@ -178,7 +164,7 @@ const Uploader = () => {
                         <div className="flex items-start gap-4 p-4 bg-[#F5F0EC] border border-[#604B42]/20 mb-6">
                             <div className="p-3 bg-[#17282E]/10 text-[#17282E] relative border border-[#17282E]/20">
                                 <DocumentTextIcon className="w-8 h-8" />
-                                {scanComplete && (
+                                {uploadComplete && (
                                     <motion.div
                                         initial={{ scale: 0 }}
                                         animate={{ scale: 1 }}
@@ -197,7 +183,7 @@ const Uploader = () => {
                                 </p>
                             </div>
 
-                            {!isScanning && !scanComplete && (
+                            {!isUploading && !uploadComplete && (
                                 <button
                                     onClick={(e) => { e.stopPropagation(); resetUploader(); }}
                                     className="text-[#604B42]/60 hover:text-red-500 p-2 transition-colors hover:bg-[#F5F0EC]"
@@ -215,48 +201,24 @@ const Uploader = () => {
                             </div>
                         )}
 
-                        {/* Scanning progress UI */}
-                        <AnimatePresence>
-                            {isScanning && (
-                                <motion.div
-                                    initial={{ opacity: 0, height: 0 }}
-                                    animate={{ opacity: 1, height: 'auto' }}
-                                    exit={{ opacity: 0, height: 0 }}
-                                    className="mb-6 overflow-hidden"
-                                >
-                                    <div className="flex justify-between text-sm mb-2">
-                                        <span className="font-medium text-[#17282E] flex items-center gap-2">
-                                            <ArrowPathIcon className="w-4 h-4 animate-spin" />
-                                            Scanning for clauses...
-                                        </span>
-                                        <span className="text-slate-500 font-medium">{Math.min(simulatedProgress, 100)}%</span>
-                                    </div>
-                                    <div className="w-full bg-[#F5F0EC] h-2.5 overflow-hidden border border-[#604B42]/30">
-                                        <motion.div
-                                            className="bg-[#17282E] h-full w-fullorigin-left"
-                                            initial={{ width: 0 }}
-                                            animate={{ width: `${Math.min(simulatedProgress, 100)}%` }}
-                                            transition={{ ease: "linear" }}
-                                        />
-                                    </div>
-                                </motion.div>
-                            )}
-                        </AnimatePresence>
+                        {isUploading && (
+                            <div className="mb-6 flex items-center gap-3">
+                                <ArrowPathIcon className="w-5 h-5 animate-spin text-[#17282E]" />
+                                <span className="text-sm font-medium text-[#17282E]">Uploading document…</span>
+                            </div>
+                        )}
 
-                        {/* Scan Complete State */}
-                        {scanComplete && (
+                        {uploadComplete && (
                             <motion.div
                                 initial={{ opacity: 0, y: 10 }}
                                 animate={{ opacity: 1, y: 0 }}
-                                className="mb-8 p-5 bg-yellow-50 text-yellow-800 border-l-4 border-yellow-400"
+                                className="mb-6 p-5 bg-emerald-50 text-emerald-800 border-l-4 border-emerald-400"
                             >
                                 <div className="flex items-start gap-3">
-                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6 shrink-0 mt-0.5text-yellow-500">
-                                        <path fillRule="evenodd" d="M9.401 3.003c1.155-2 4.043-2 5.197 0l7.355 12.748c1.154 2-.29 4.5-2.599 4.5H4.645c-2.309 0-3.752-2.5-2.598-4.5L9.4 3.003zM12 8.25a.75.75 0 01.75.75v3.75a.75.75 0 01-1.5 0V9a.75.75 0 01.75-.75zm0 8.25a.75.75 0 100-1.5.75.75 0 000 1.5z" clipRule="evenodd" />
-                                    </svg>
+                                    <CheckCircleIcon className="w-6 h-6 shrink-0 mt-0.5 text-emerald-500" />
                                     <div>
-                                        <h5 className="font-bold">Scan Complete (Mock UI)</h5>
-                                        <p className="text-sm mt-1">2 potentially predatory clauses and 1 highly unusual limitation of liability found. Detailed breakdown would appear here.</p>
+                                        <h5 className="font-bold">Upload complete</h5>
+                                        <p className="text-sm mt-1">Your document has been uploaded. Head to your dashboard to view and analyze it.</p>
                                     </div>
                                 </div>
                             </motion.div>
@@ -264,21 +226,17 @@ const Uploader = () => {
 
                         {/* Action Buttons */}
                         <div className="flex flex-col sm:flex-row gap-3">
-                            {!scanComplete ? (
+                            {!uploadComplete ? (
                                 isAuthenticated ? (
                                     <button
-                                        onClick={initiateScan}
-                                        disabled={isScanning}
-                                        className={`flex-1 py-3 px-6 pixel-button font-semibold transition-all ${isScanning
+                                        onClick={initiateUpload}
+                                        disabled={isUploading}
+                                        className={`flex-1 py-3 px-6 pixel-button font-semibold transition-all ${isUploading
                                             ? 'bg-[#17282E]/70 text-white cursor-not-allowed opacity-90'
                                             : 'bg-[#17282E] hover:bg-[#17282E] text-white hover:shadow-lg active:scale-[0.98]'
                                             } flex items-center justify-center gap-2`}
                                     >
-                                        {isScanning ? (
-                                            'Analyzing text...'
-                                        ) : (
-                                            'Scan for Predatory Clauses'
-                                        )}
+                                        {isUploading ? 'Uploading…' : 'Upload Document'}
                                     </button>
                                 ) : (
                                     <button
@@ -286,19 +244,22 @@ const Uploader = () => {
                                         onClick={() => loginWithRedirect({ appState: { returnTo: '/' } })}
                                         className="flex-1 py-3 px-6 pixel-button font-semibold bg-[#17282E] hover:bg-[#17282E] text-white transition-all active:scale-[0.98] flex items-center justify-center gap-2"
                                     >
-                                        Sign in to scan documents
+                                        Sign in to upload documents
                                     </button>
                                 )
                             ) : (
                                 <>
-                                    <button className="flex-1 py-3 px-6 pixel-button font-semibold bg-[#17282E] hover:bg-[#17282E] text-white transition-all active:scale-[0.98]">
-                                        View Detailed Report
+                                    <button
+                                        onClick={() => navigate('/dashboard')}
+                                        className="flex-1 py-3 px-6 pixel-button font-semibold bg-[#17282E] hover:bg-[#17282E] text-white transition-all active:scale-[0.98]"
+                                    >
+                                        Go to Dashboard
                                     </button>
                                     <button
                                         onClick={resetUploader}
                                         className="py-3 px-6 pixel-button font-semibold bg-[#F5F0EC] hover:bg-[#EBE6E3] text-[#17282E] transition-all active:scale-[0.98]"
                                     >
-                                        Scan Another
+                                        Upload Another
                                     </button>
                                 </>
                             )}
