@@ -6,6 +6,10 @@
 
 LegaLens is an AI-powered legal document assistant. Upload contracts (PDF or DOCX), get clause-level analysis against Canadian law, negotiation strategies, and a voice consultant—all backed by Gemini, LangChain, and a RAG pipeline over a legal knowledge base.
 
+[Devpost](https://devpost.com/software/legalens)
+
+Created at HackCanada 2026
+
 ## Tech stack
 
 ![LegaLens tech stack and data flow](docs/tech-stack.png)
